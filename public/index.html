@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lista de Nomes</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="hero">
+        <p class="tag">Google Sheets + Render</p>
+        <h1>Nomes da planilha</h1>
+        <p class="subtitle">
+          Conteúdo carregado automaticamente da aba <strong>Nomes</strong>
+        </p>
+        <button id="reloadBtn" type="button">Atualizar</button>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Lista</h2>
+          <span id="status" class="status">Carregando...</span>
+        </div>
+        <ul id="nameList" class="name-list" aria-live="polite"></ul>
+      </section>
+    </main>
+
+    <script>
+      const statusEl = document.getElementById("status");
+      const listEl = document.getElementById("nameList");
+      const reloadBtn = document.getElementById("reloadBtn");
+
+      function renderNames(names) {
+        listEl.innerHTML = "";
+
+        if (!names.length) {
+          const li = document.createElement("li");
+          li.className = "empty";
+          li.textContent = "Nenhum nome encontrado na aba Nomes.";
+          listEl.appendChild(li);
+          return;
+        }
+
+        names.forEach((name, index) => {
+          const li = document.createElement("li");
+          li.className = "name-item";
+          li.innerHTML = `<span class="index">${index + 1}</span><span class="text"></span>`;
+          li.querySelector(".text").textContent = name;
+          listEl.appendChild(li);
+        });
+      }
+
+      async function loadNames() {
+        statusEl.textContent = "Carregando...";
+        reloadBtn.disabled = true;
+
+        try {
+          const res = await fetch("/api/nomes", { cache: "no-store" });
+          const data = await res.json();
+
+          if (!res.ok) {
+            throw new Error(data.details || data.error || "Erro desconhecido");
+          }
+
+          renderNames(data.names || []);
+          statusEl.textContent = `${(data.names || []).length} nome(s)`;
+        } catch (err) {
+          renderNames([]);
+          statusEl.textContent = "Erro ao carregar";
+          const li = document.createElement("li");
+          li.className = "empty";
+          li.textContent = err.message;
+          listEl.appendChild(li);
+        } finally {
+          reloadBtn.disabled = false;
+        }
+      }
+
+      reloadBtn.addEventListener("click", loadNames);
+      loadNames();
+    </script>
+  </body>
+  </html>

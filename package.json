@@ -1,0 +1,16 @@
+{
+  "name": "render-google-sheet-nomes",
+  "version": "1.0.0",
+  "description": "Webservice para exibir nomes da aba Nomes de uma planilha Google Sheets publicada",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
