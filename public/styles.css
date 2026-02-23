@@ -90,6 +90,78 @@ body {
   overflow: hidden;
 }
 
+.controls-panel {
+  margin-bottom: 18px;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: 180px minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 16px 18px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field span {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 11px 12px;
+  font-size: 14px;
+}
+
+.field select option {
+  color: #111;
+}
+
+#loadBtn {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-height: 43px;
+  font-weight: 700;
+  color: #06111e;
+  background: linear-gradient(135deg, var(--accent), #99f4ff);
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(89, 242, 255, 0.2);
+}
+
+#loadBtn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.sheet-info {
+  padding: 12px 18px 16px;
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.sheet-info strong {
+  color: var(--text);
+}
+
+.warn {
+  color: #ffd88f;
+}
+
 .panel-head {
   display: flex;
   justify-content: space-between;
@@ -148,6 +220,45 @@ body {
   letter-spacing: 0.01em;
 }
 
+.student-item {
+  align-items: center;
+}
+
+.student-main {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.student-main .text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-main .meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.f-btn {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  min-width: 100px;
+}
+
+.f-btn.is-active {
+  border-color: rgba(255, 106, 106, 0.5);
+  background: linear-gradient(135deg, rgba(255, 106, 106, 0.2), rgba(255, 76, 76, 0.08));
+  color: #ffd7d7;
+}
+
 .empty {
   color: var(--muted);
 }
@@ -160,5 +271,19 @@ body {
   .hero,
   .panel {
     border-radius: 16px;
+  }
+
+  .filters {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .student-item {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .f-btn {
+    width: 100%;
   }
 }

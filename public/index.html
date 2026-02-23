@@ -3,82 +3,227 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lista de Nomes</title>
+    <title>Chamada por Turma</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="app">
       <section class="hero">
         <p class="tag">Google Sheets + Render</p>
-        <h1>Nomes da planilha</h1>
+        <h1>Chamada por Turma</h1>
         <p class="subtitle">
-          Conteúdo carregado automaticamente da aba <strong>Nomes</strong>
+          Selecione a data e a turma para carregar os nomes da aba
+          <strong>Nomes Chamada</strong>
         </p>
-        <button id="reloadBtn" type="button">Atualizar</button>
+      </section>
+
+      <section class="panel controls-panel">
+        <form id="filterForm" class="filters">
+          <label class="field">
+            <span>Data</span>
+            <input id="dateInput" name="date" type="text" placeholder="23/2" />
+          </label>
+
+          <label class="field">
+            <span>Turma</span>
+            <select id="turmaSelect" name="turma"></select>
+          </label>
+
+          <button id="loadBtn" type="submit">Carregar chamada</button>
+        </form>
+
+        <div id="sheetInfo" class="sheet-info">Carregando...</div>
       </section>
 
       <section class="panel">
         <div class="panel-head">
-          <h2>Lista</h2>
-          <span id="status" class="status">Carregando...</span>
+          <h2>Alunos</h2>
+          <span id="status" class="status">Aguardando...</span>
         </div>
-        <ul id="nameList" class="name-list" aria-live="polite"></ul>
+        <ul id="studentList" class="name-list" aria-live="polite"></ul>
       </section>
     </main>
 
     <script>
       const statusEl = document.getElementById("status");
-      const listEl = document.getElementById("nameList");
-      const reloadBtn = document.getElementById("reloadBtn");
+      const studentListEl = document.getElementById("studentList");
+      const dateInputEl = document.getElementById("dateInput");
+      const turmaSelectEl = document.getElementById("turmaSelect");
+      const loadBtnEl = document.getElementById("loadBtn");
+      const formEl = document.getElementById("filterForm");
+      const sheetInfoEl = document.getElementById("sheetInfo");
 
-      function renderNames(names) {
-        listEl.innerHTML = "";
+      const marks = new Map();
+      let latestMeta = null;
 
-        if (!names.length) {
+      function keyForMark(rowNumber, colA1) {
+        return `${rowNumber}:${colA1}`;
+      }
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function renderInfo(data) {
+        const selected = data.selected || {};
+        const dateColumn = selected.dateColumn;
+
+        const dateInfo = dateColumn
+          ? `Data ${selected.date} encontrada na coluna ${dateColumn.a1Column} (linha ${selected.dateHeaderRow})`
+          : `Data ${selected.date} não encontrada`;
+
+        const turmaInfo = selected.turmaRow
+          ? `Turma em ${selected.turmaCell}`
+          : `Turma não encontrada`;
+
+        const duplicateInfo =
+          selected.dateMatchesCount > 1
+            ? `Atenção: data repetida ${selected.dateMatchesCount}x (usando a 1ª coluna).`
+            : "";
+
+        sheetInfoEl.innerHTML = `
+          <div><strong>${dateInfo}</strong></div>
+          <div>${turmaInfo}</div>
+          ${duplicateInfo ? `<div class="warn">${duplicateInfo}</div>` : ""}
+        `;
+      }
+
+      function renderStudents(data) {
+        studentListEl.innerHTML = "";
+        const selected = data.selected || {};
+        const colA1 = selected.dateColumn ? selected.dateColumn.a1Column : null;
+
+        if (!selected.turmaRow) {
           const li = document.createElement("li");
           li.className = "empty";
-          li.textContent = "Nenhum nome encontrado na aba Nomes.";
-          listEl.appendChild(li);
+          li.textContent = "Turma não encontrada na aba Nomes Chamada.";
+          studentListEl.appendChild(li);
           return;
         }
 
-        names.forEach((name, index) => {
+        if (!selected.dateColumn) {
           const li = document.createElement("li");
-          li.className = "name-item";
-          li.innerHTML = `<span class="index">${index + 1}</span><span class="text"></span>`;
-          li.querySelector(".text").textContent = name;
-          listEl.appendChild(li);
+          li.className = "empty";
+          li.textContent = "Data não encontrada no cabeçalho da chamada.";
+          studentListEl.appendChild(li);
+          return;
+        }
+
+        const students = data.students || [];
+        if (!students.length) {
+          const li = document.createElement("li");
+          li.className = "empty";
+          li.textContent = "Nenhum aluno encontrado para essa turma.";
+          studentListEl.appendChild(li);
+          return;
+        }
+
+        students.forEach((student, index) => {
+          const li = document.createElement("li");
+          li.className = "name-item student-item";
+          const markKey = keyForMark(student.rowNumber, colA1);
+          const isAbsent = marks.get(markKey) === "F";
+
+          li.innerHTML = `
+            <span class="index">${index + 1}</span>
+            <div class="student-main">
+              <span class="text"></span>
+              <small class="meta">Linha ${student.rowNumber} • Célula ${colA1}${student.rowNumber}</small>
+            </div>
+            <button type="button" class="f-btn ${isAbsent ? "is-active" : ""}" aria-pressed="${isAbsent}">
+              ${isAbsent ? "Falta (F)" : "Marcar F"}
+            </button>
+          `;
+
+          li.querySelector(".text").textContent = student.name;
+
+          li.querySelector(".f-btn").addEventListener("click", () => {
+            const current = marks.get(markKey) === "F";
+            if (current) {
+              marks.delete(markKey);
+            } else {
+              marks.set(markKey, "F");
+            }
+            renderStudents(data);
+            setStatus(
+              `${students.length} aluno(s) • ${Array.from(marks.values()).filter((v) => v === "F").length} falta(s) marcada(s)`
+            );
+          });
+
+          studentListEl.appendChild(li);
         });
       }
 
-      async function loadNames() {
-        statusEl.textContent = "Carregando...";
-        reloadBtn.disabled = true;
+      function syncFilters(data) {
+        latestMeta = data;
 
-        try {
-          const res = await fetch("/api/nomes", { cache: "no-store" });
-          const data = await res.json();
+        const turmaOptions = data.turmaOptions || [];
+        if (!turmaSelectEl.options.length) {
+          turmaSelectEl.innerHTML = "";
+          turmaOptions.forEach((turma) => {
+            const option = document.createElement("option");
+            option.value = turma;
+            option.textContent = turma;
+            turmaSelectEl.appendChild(option);
+          });
+        }
 
-          if (!res.ok) {
-            throw new Error(data.details || data.error || "Erro desconhecido");
-          }
+        if (!dateInputEl.value) {
+          dateInputEl.value = data.todaySuggestion || "";
+        }
 
-          renderNames(data.names || []);
-          statusEl.textContent = `${(data.names || []).length} nome(s)`;
-        } catch (err) {
-          renderNames([]);
-          statusEl.textContent = "Erro ao carregar";
-          const li = document.createElement("li");
-          li.className = "empty";
-          li.textContent = err.message;
-          listEl.appendChild(li);
-        } finally {
-          reloadBtn.disabled = false;
+        if (data.selected?.turma) {
+          turmaSelectEl.value = data.selected.turma;
         }
       }
 
-      reloadBtn.addEventListener("click", loadNames);
-      loadNames();
+      async function loadChamada() {
+        loadBtnEl.disabled = true;
+        setStatus("Carregando...");
+        sheetInfoEl.textContent = "Consultando planilha...";
+
+        const params = new URLSearchParams();
+        if (dateInputEl.value.trim()) params.set("date", dateInputEl.value.trim());
+        if (turmaSelectEl.value.trim()) params.set("turma", turmaSelectEl.value.trim());
+
+        try {
+          const res = await fetch(`/api/chamada?${params.toString()}`, { cache: "no-store" });
+          const data = await res.json();
+
+          if (!res.ok) {
+            throw new Error(data.details || data.error || "Erro ao carregar");
+          }
+
+          syncFilters(data);
+          renderInfo(data);
+          renderStudents(data);
+
+          const totalStudents = (data.students || []).length;
+          setStatus(`${totalStudents} aluno(s) carregado(s)`);
+        } catch (err) {
+          studentListEl.innerHTML = "";
+          const li = document.createElement("li");
+          li.className = "empty";
+          li.textContent = err.message;
+          studentListEl.appendChild(li);
+          sheetInfoEl.innerHTML = `<div class="warn">${err.message}</div>`;
+          setStatus("Erro ao carregar");
+        } finally {
+          loadBtnEl.disabled = false;
+        }
+      }
+
+      formEl.addEventListener("submit", (event) => {
+        event.preventDefault();
+        loadChamada();
+      });
+
+      (async function init() {
+        await loadChamada();
+        if (!turmaSelectEl.value && latestMeta?.turmaOptions?.length) {
+          turmaSelectEl.value = latestMeta.turmaOptions[0];
+        }
+      })();
     </script>
   </body>
   </html>
