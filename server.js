@@ -1,5 +1,6 @@
 const path = require("path");
 const express = require("express");
+const { google } = require("googleapis");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,8 +11,13 @@ const SHEET_PUBLISH_ID =
 const SHEET_TAB_NAME = process.env.SHEET_TAB_NAME || "Nomes";
 const SHEET_CHAMADA_TAB_NAME = process.env.SHEET_CHAMADA_TAB_NAME || "Nomes Chamada";
 const SHEET_CHAMADA_GID = process.env.SHEET_CHAMADA_GID || "934578770";
+const GOOGLE_SPREADSHEET_ID =
+  process.env.GOOGLE_SPREADSHEET_ID || "1spXWVi4VD1wIkGVXMVdcLpm9dHAgCJ5CTCBgmpiUji8";
+const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "";
+const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY || "";
 
 app.use(express.static("public"));
+app.use(express.json());
 
 function parseGoogleVizResponse(text) {
   const start = text.indexOf("{");
@@ -169,6 +175,27 @@ function toA1Column(colIndexZeroBased) {
   return result;
 }
 
+function isValidA1Cell(cell) {
+  return /^[A-Z]+[1-9]\d*$/.test(String(cell || "").trim());
+}
+
+function getSheetsClient() {
+  if (!GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY || !GOOGLE_SPREADSHEET_ID) {
+    throw new Error(
+      "Credenciais do Google Sheets nao configuradas. Configure GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY e GOOGLE_SPREADSHEET_ID."
+    );
+  }
+
+  const auth = new google.auth.JWT(
+    GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    null,
+    GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    ["https://www.googleapis.com/auth/spreadsheets"]
+  );
+
+  return google.sheets({ version: "v4", auth });
+}
+
 function formatTodayPtBrShort() {
   const now = new Date();
   return `${now.getDate()}/${now.getMonth() + 1}`;
@@ -243,7 +270,7 @@ function isKnownTurmaLabel(cellA) {
   return allAliases.includes(normalized);
 }
 
-function extractStudentsForTurma(rows, turmaRowIndex) {
+function extractStudentsForTurma(rows, turmaRowIndex, dateColIndex) {
   if (turmaRowIndex < 0) return [];
   const students = [];
 
@@ -267,7 +294,11 @@ function extractStudentsForTurma(rows, turmaRowIndex) {
     students.push({
       name,
       rowIndex: i,
-      rowNumber: i + 1
+      rowNumber: i + 1,
+      currentValue:
+        typeof dateColIndex === "number"
+          ? String(row[dateColIndex] || "").trim().toUpperCase()
+          : ""
     });
   }
 
@@ -304,7 +335,11 @@ async function fetchChamadaData(selectedDate, selectedTurma) {
   const turmaRowIndex = findTurmaRow(rows, chosenTurma);
   const turmaRowNumber = turmaRowIndex >= 0 ? turmaRowIndex + 1 : null;
   const turmaCell = turmaRowNumber ? `A${turmaRowNumber}` : null;
-  const students = extractStudentsForTurma(rows, turmaRowIndex);
+  const students = extractStudentsForTurma(
+    rows,
+    turmaRowIndex,
+    selectedDateColumn ? selectedDateColumn.colIndex : undefined
+  );
 
   return {
     sourceUrl,
@@ -415,6 +450,53 @@ app.get("/api/chamada", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: "Falha ao carregar dados da aba Nomes Chamada.",
+      details: error.message
+    });
+  }
+});
+
+app.post("/api/chamada/marcar", async (req, res) => {
+  try {
+    const cell = String(req.body?.cell || "")
+      .trim()
+      .toUpperCase();
+    const value = String(req.body?.value || "")
+      .trim()
+      .toUpperCase();
+
+    if (!isValidA1Cell(cell)) {
+      return res.status(400).json({
+        error: "Celula invalida. Use formato A1 (ex.: F23)."
+      });
+    }
+
+    if (value !== "" && value !== "F") {
+      return res.status(400).json({
+        error: "Valor invalido. Use 'F' para marcar falta ou vazio para limpar."
+      });
+    }
+
+    const sheets = getSheetsClient();
+    const range = `'${SHEET_CHAMADA_TAB_NAME}'!${cell}`;
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: GOOGLE_SPREADSHEET_ID,
+      range,
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [[value]]
+      }
+    });
+
+    res.json({
+      ok: true,
+      sheet: SHEET_CHAMADA_TAB_NAME,
+      cell,
+      value
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha ao gravar no Google Sheets.",
       details: error.message
     });
   }

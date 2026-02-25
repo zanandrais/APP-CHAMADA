@@ -253,6 +253,11 @@ body {
   min-width: 100px;
 }
 
+.f-btn:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
 .f-btn.is-active {
   border-color: rgba(255, 106, 106, 0.5);
   background: linear-gradient(135deg, rgba(255, 106, 106, 0.2), rgba(255, 76, 76, 0.08));
