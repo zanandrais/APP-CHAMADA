@@ -214,12 +214,87 @@ const TURMA_OPTIONS = [
 const TURMA_ALIASES = {
   "8 ano a": ["8 a", "8 ano a"],
   "8 ano b": ["8 b", "8 ano b"],
-  "9 ano anchieta": ["9 ano anchieta", "9 anchieta", "9 a"],
+  "9 ano anchieta": ["9 ano anchieta", "9 anchieta", "9 ano", "9 a", "9"],
   "1 serie funcionarios": ["1 serie funcionarios", "1 serie", "1 série"],
   "1 serie anchieta": ["1 serie anchieta", "1 serie", "1 série"],
   "2 serie anchieta": ["2 serie anchieta", "2 serie", "2 série"],
   "3 serie anchieta": ["3 serie anchieta", "3 serie", "3 série"]
 };
+
+function parseTurmaDescriptor(text) {
+  const normalized = normalizeText(text);
+  if (!normalized) return null;
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  const numberMatch = normalized.match(/^(\d{1,2})/);
+
+  return {
+    normalized,
+    tokens,
+    number: numberMatch ? numberMatch[1] : null,
+    letter: tokens.find((token) => /^[ab]$/.test(token)) || null,
+    stage: tokens.includes("ano") ? "ano" : tokens.includes("serie") ? "serie" : null,
+    campus: tokens.includes("anchieta")
+      ? "anchieta"
+      : tokens.includes("funcionarios")
+        ? "funcionarios"
+        : null
+  };
+}
+
+function looksLikeTurmaHeader(cellA) {
+  const descriptor = parseTurmaDescriptor(cellA);
+  if (!descriptor?.number) return false;
+  if (!/^\d{1,2}/.test(descriptor.normalized)) return false;
+
+  // Turma labels are short markers, unlike student full names.
+  if (descriptor.tokens.length > 4) return false;
+
+  return Boolean(descriptor.stage || descriptor.letter || descriptor.campus);
+}
+
+function scoreTurmaCandidate(selectedDescriptor, candidateDescriptor) {
+  if (!selectedDescriptor || !candidateDescriptor?.number) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  let score = 0;
+
+  if (selectedDescriptor.number) {
+    if (selectedDescriptor.number !== candidateDescriptor.number) {
+      return Number.NEGATIVE_INFINITY;
+    }
+    score += 100;
+  }
+
+  if (selectedDescriptor.letter) {
+    if (candidateDescriptor.letter && selectedDescriptor.letter !== candidateDescriptor.letter) {
+      return Number.NEGATIVE_INFINITY;
+    }
+    score += candidateDescriptor.letter ? 20 : 4;
+  }
+
+  if (selectedDescriptor.stage) {
+    if (candidateDescriptor.stage === selectedDescriptor.stage) {
+      score += 12;
+    } else if (!candidateDescriptor.stage) {
+      score += 2;
+    }
+  }
+
+  if (selectedDescriptor.campus) {
+    if (candidateDescriptor.campus && candidateDescriptor.campus !== selectedDescriptor.campus) {
+      return Number.NEGATIVE_INFINITY;
+    }
+    score += candidateDescriptor.campus ? 18 : 1;
+  }
+
+  if (candidateDescriptor.normalized === selectedDescriptor.normalized) {
+    score += 30;
+  }
+
+  return score;
+}
 
 function findDateHeaderRow(rows) {
   return rows.findIndex((row) => normalizeText(row[0]) === "turma");
@@ -250,19 +325,64 @@ function findTurmaRow(rows, turmaSelection) {
   const normalizedSelection = normalizeText(turmaSelection);
   const aliases = TURMA_ALIASES[normalizedSelection] || [normalizedSelection];
   const aliasSet = new Set(aliases.map(normalizeText));
+  const selectedDescriptor = parseTurmaDescriptor(turmaSelection);
+  const candidates = [];
 
   for (let i = 0; i < rows.length; i++) {
-    const cellA = normalizeText(rows[i]?.[0]);
-    if (!cellA) continue;
-    if (aliasSet.has(cellA)) {
-      return i;
+    const rawCellA = String(rows[i]?.[0] || "").trim();
+    const normalizedCellA = normalizeText(rawCellA);
+    if (!normalizedCellA) continue;
+
+    const aliasMatch = aliasSet.has(normalizedCellA);
+    const headerLike = looksLikeTurmaHeader(rawCellA);
+    if (!aliasMatch && !headerLike) continue;
+
+    const candidateDescriptor = parseTurmaDescriptor(rawCellA);
+    const descriptorScore = scoreTurmaCandidate(selectedDescriptor, candidateDescriptor);
+
+    if (descriptorScore === Number.NEGATIVE_INFINITY && !aliasMatch) {
+      continue;
+    }
+
+    let score = aliasMatch ? 200 : 0;
+    if (descriptorScore !== Number.NEGATIVE_INFINITY) {
+      score += descriptorScore;
+    }
+
+    candidates.push({
+      rowIndex: i,
+      score
+    });
+  }
+
+  if (!candidates.length) return -1;
+
+  candidates.sort((a, b) => b.score - a.score || a.rowIndex - b.rowIndex);
+
+  const bestScore = candidates[0].score;
+  const bestCandidates = candidates.filter((candidate) => candidate.score === bestScore);
+
+  if (
+    bestCandidates.length > 1 &&
+    selectedDescriptor?.number === "1" &&
+    selectedDescriptor?.stage === "serie" &&
+    selectedDescriptor?.campus
+  ) {
+    if (selectedDescriptor.campus === "funcionarios") {
+      return bestCandidates[0].rowIndex;
+    }
+
+    if (selectedDescriptor.campus === "anchieta") {
+      return bestCandidates[bestCandidates.length - 1].rowIndex;
     }
   }
 
-  return -1;
+  return bestCandidates[0].rowIndex;
 }
 
 function isKnownTurmaLabel(cellA) {
+  if (looksLikeTurmaHeader(cellA)) return true;
+
   const normalized = normalizeText(cellA);
   if (!normalized) return false;
 
@@ -305,34 +425,12 @@ function extractStudentsForTurma(rows, turmaRowIndex, dateColIndex) {
   return students;
 }
 
-async function fetchChamadaSheetRows() {
-  const csvUrl = `https://docs.google.com/spreadsheets/d/e/${SHEET_PUBLISH_ID}/pub?gid=${SHEET_CHAMADA_GID}&single=true&output=csv`;
-  const csvResponse = await fetch(csvUrl, {
-    headers: { "User-Agent": "Mozilla/5.0" }
-  });
-
-  if (!csvResponse.ok) {
-    throw new Error(
-      `Erro ao baixar CSV da aba ${SHEET_CHAMADA_TAB_NAME}: ${csvResponse.status}`
-    );
-  }
-
-  const csvText = await csvResponse.text();
-  return { rows: parseCsv(csvText), sourceUrl: csvUrl };
-}
-
-async function fetchChamadaData(selectedDate, selectedTurma) {
-  const { rows, sourceUrl } = await fetchChamadaSheetRows();
+function buildTurmaSelectionData(rows, sheetName, selectedDate, selectedTurma) {
   const { headerRowIndex, dates } = extractDateColumns(rows);
-
-  const todaySuggestion = formatTodayPtBrShort();
-  const chosenDate = String(selectedDate || todaySuggestion).trim();
-  const chosenTurma = String(selectedTurma || TURMA_OPTIONS[0]).trim();
-
-  const dateMatches = dates.filter((d) => d.value === chosenDate);
+  const dateMatches = dates.filter((d) => d.value === selectedDate);
   const selectedDateColumn = dateMatches[0] || null;
 
-  const turmaRowIndex = findTurmaRow(rows, chosenTurma);
+  const turmaRowIndex = findTurmaRow(rows, selectedTurma);
   const turmaRowNumber = turmaRowIndex >= 0 ? turmaRowIndex + 1 : null;
   const turmaCell = turmaRowNumber ? `A${turmaRowNumber}` : null;
   const students = extractStudentsForTurma(
@@ -342,14 +440,11 @@ async function fetchChamadaData(selectedDate, selectedTurma) {
   );
 
   return {
-    sourceUrl,
-    sheet: SHEET_CHAMADA_TAB_NAME,
-    todaySuggestion,
-    turmaOptions: TURMA_OPTIONS,
+    sheet: sheetName,
     availableDates: dates.map((d) => d.value),
     selected: {
-      date: chosenDate,
-      turma: chosenTurma,
+      date: selectedDate,
+      turma: selectedTurma,
       dateColumn: selectedDateColumn,
       dateMatchesCount: dateMatches.length,
       dateHeaderRow: headerRowIndex >= 0 ? headerRowIndex + 1 : null,
@@ -357,6 +452,133 @@ async function fetchChamadaData(selectedDate, selectedTurma) {
       turmaCell
     },
     students
+  };
+}
+
+function buildStudentNameBuckets(students) {
+  const buckets = new Map();
+
+  for (const student of students || []) {
+    const key = normalizeText(student.name);
+    if (!key) continue;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(student);
+  }
+
+  return buckets;
+}
+
+function mergeStudentsWithNomes(chamadaStudents, nomesSelection) {
+  const nomesStudents = nomesSelection?.students || [];
+  const namesBuckets = buildStudentNameBuckets(nomesStudents);
+
+  return (chamadaStudents || []).map((student, index) => {
+    const nameKey = normalizeText(student.name);
+    let nomesStudent = null;
+
+    if (nameKey && namesBuckets.has(nameKey)) {
+      const bucket = namesBuckets.get(nameKey);
+      nomesStudent = bucket.shift() || null;
+    }
+
+    // Fallback por posição relativa quando os nomes divergem levemente entre abas.
+    if (!nomesStudent && index < nomesStudents.length) {
+      nomesStudent = nomesStudents[index];
+    }
+
+    const nomesDateColumn = nomesSelection?.selected?.dateColumn || null;
+    const nomesCell =
+      nomesStudent && nomesDateColumn
+        ? `${nomesDateColumn.a1Column}${nomesStudent.rowNumber}`
+        : null;
+
+    return {
+      ...student,
+      nomesRowNumber: nomesStudent ? nomesStudent.rowNumber : null,
+      nomesCurrentValue: nomesStudent ? nomesStudent.currentValue || "" : "",
+      nomesCell,
+      nomesMatched: Boolean(nomesStudent)
+    };
+  });
+}
+
+async function fetchPublishedTabRowsByGid(tabName, gid) {
+  const csvUrl = `https://docs.google.com/spreadsheets/d/e/${SHEET_PUBLISH_ID}/pub?gid=${gid}&single=true&output=csv`;
+  const csvResponse = await fetch(csvUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" }
+  });
+
+  if (!csvResponse.ok) {
+    throw new Error(`Erro ao baixar CSV da aba ${tabName}: ${csvResponse.status}`);
+  }
+
+  const csvText = await csvResponse.text();
+  return { rows: parseCsv(csvText), sourceUrl: csvUrl, gid };
+}
+
+async function fetchPublishedTabRowsByName(tabName) {
+  const pubHtmlUrl = `https://docs.google.com/spreadsheets/d/e/${SHEET_PUBLISH_ID}/pubhtml`;
+  const pubHtmlResponse = await fetch(pubHtmlUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" }
+  });
+
+  if (!pubHtmlResponse.ok) {
+    throw new Error(
+      `Erro ao consultar pagina publicada da planilha: ${pubHtmlResponse.status}`
+    );
+  }
+
+  const pubHtml = decodeHtml(await pubHtmlResponse.text());
+  const gid = extractTabGidFromPubHtml(pubHtml, tabName);
+
+  if (!gid) {
+    throw new Error(`Nao foi possivel localizar a aba "${tabName}".`);
+  }
+
+  return fetchPublishedTabRowsByGid(tabName, gid);
+}
+
+async function fetchChamadaSheetRows() {
+  return fetchPublishedTabRowsByGid(SHEET_CHAMADA_TAB_NAME, SHEET_CHAMADA_GID);
+}
+
+async function fetchChamadaData(selectedDate, selectedTurma) {
+  const todaySuggestion = formatTodayPtBrShort();
+  const chosenDate = String(selectedDate || todaySuggestion).trim();
+  const chosenTurma = String(selectedTurma || TURMA_OPTIONS[0]).trim();
+  const [chamadaSource, nomesSource] = await Promise.all([
+    fetchChamadaSheetRows(),
+    fetchPublishedTabRowsByName(SHEET_TAB_NAME)
+  ]);
+
+  const chamadaSelection = buildTurmaSelectionData(
+    chamadaSource.rows,
+    SHEET_CHAMADA_TAB_NAME,
+    chosenDate,
+    chosenTurma
+  );
+  const nomesSelection = buildTurmaSelectionData(
+    nomesSource.rows,
+    SHEET_TAB_NAME,
+    chosenDate,
+    chosenTurma
+  );
+  const mergedStudents = mergeStudentsWithNomes(chamadaSelection.students, nomesSelection);
+
+  return {
+    sourceUrl: chamadaSource.sourceUrl,
+    sourceUrlNomes: nomesSource.sourceUrl,
+    sheet: SHEET_CHAMADA_TAB_NAME,
+    sheetNomes: SHEET_TAB_NAME,
+    todaySuggestion,
+    turmaOptions: TURMA_OPTIONS,
+    availableDates: chamadaSelection.availableDates,
+    selected: chamadaSelection.selected,
+    nomesSelection: {
+      selected: nomesSelection.selected,
+      availableDates: nomesSelection.availableDates
+    },
+    students: mergedStudents
   };
 }
 
@@ -457,6 +679,7 @@ app.get("/api/chamada", async (req, res) => {
 
 app.post("/api/chamada/marcar", async (req, res) => {
   try {
+    const sheet = String(req.body?.sheet || SHEET_CHAMADA_TAB_NAME).trim();
     const cell = String(req.body?.cell || "")
       .trim()
       .toUpperCase();
@@ -470,14 +693,33 @@ app.post("/api/chamada/marcar", async (req, res) => {
       });
     }
 
-    if (value !== "" && value !== "F") {
+    const allowedSheets = new Set([SHEET_CHAMADA_TAB_NAME, SHEET_TAB_NAME]);
+    if (!allowedSheets.has(sheet)) {
       return res.status(400).json({
-        error: "Valor invalido. Use 'F' para marcar falta ou vazio para limpar."
+        error: "Aba invalida para gravacao."
+      });
+    }
+
+    if (!["", "F", "1", "2"].includes(value)) {
+      return res.status(400).json({
+        error: "Valor invalido. Use 'F', '1', '2' ou vazio para limpar."
+      });
+    }
+
+    if (sheet === SHEET_CHAMADA_TAB_NAME && value !== "" && value !== "F") {
+      return res.status(400).json({
+        error: "Na aba Nomes Chamada, use apenas 'F' ou vazio."
+      });
+    }
+
+    if (sheet === SHEET_TAB_NAME && value !== "" && value !== "1" && value !== "2") {
+      return res.status(400).json({
+        error: "Na aba Nomes, use apenas '1', '2' ou vazio."
       });
     }
 
     const sheets = getSheetsClient();
-    const range = `'${SHEET_CHAMADA_TAB_NAME}'!${cell}`;
+    const range = `'${sheet}'!${cell}`;
 
     await sheets.spreadsheets.values.update({
       spreadsheetId: GOOGLE_SPREADSHEET_ID,
@@ -490,7 +732,7 @@ app.post("/api/chamada/marcar", async (req, res) => {
 
     res.json({
       ok: true,
-      sheet: SHEET_CHAMADA_TAB_NAME,
+      sheet,
       cell,
       value
     });

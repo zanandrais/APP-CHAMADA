@@ -12,8 +12,8 @@
         <p class="tag">Google Sheets + Render</p>
         <h1>Chamada por Turma</h1>
         <p class="subtitle">
-          Selecione a data e a turma para carregar os nomes da aba
-          <strong>Nomes Chamada</strong>
+          Selecione data e turma para usar <strong>Nomes Chamada</strong> (F) e
+          <strong>Nomes</strong> (1/2).
         </p>
       </section>
 
@@ -23,15 +23,12 @@
             <span>Data</span>
             <input id="dateInput" name="date" type="text" placeholder="23/2" />
           </label>
-
           <label class="field">
             <span>Turma</span>
             <select id="turmaSelect" name="turma"></select>
           </label>
-
           <button id="loadBtn" type="submit">Carregar chamada</button>
         </form>
-
         <div id="sheetInfo" class="sheet-info">Carregando...</div>
       </section>
 
@@ -53,142 +50,117 @@
       const formEl = document.getElementById("filterForm");
       const sheetInfoEl = document.getElementById("sheetInfo");
 
-      const marks = new Map();
-      const savingMarks = new Set();
+      const localCellValues = new Map();
+      const savingCells = new Set();
       let latestMeta = null;
 
-      function keyForMark(rowNumber, colA1) {
-        return `${rowNumber}:${colA1}`;
+      const norm = (v) => String(v || "").trim().toUpperCase();
+      const cellKey = (sheet, cell) => `${sheet}|${cell}`;
+      const setStatus = (text) => (statusEl.textContent = text);
+      const chamadaCell = (student, col) => `${col}${student.rowNumber}`;
+
+      function getValue(sheet, cell, fallback) {
+        const key = cellKey(sheet, cell);
+        return localCellValues.has(key) ? norm(localCellValues.get(key)) : norm(fallback);
       }
 
-      function normalizeMark(value) {
-        return String(value || "").trim().toUpperCase();
+      function getFValue(student, data) {
+        const col = data?.selected?.dateColumn?.a1Column;
+        if (!col) return "";
+        return getValue(data.sheet || "Nomes Chamada", chamadaCell(student, col), student.currentValue);
       }
 
-      function setStatus(text) {
-        statusEl.textContent = text;
-      }
-
-      function getStudentCell(student, colA1) {
-        return `${colA1}${student.rowNumber}`;
-      }
-
-      function getCurrentMarkForStudent(student, colA1) {
-        const markKey = keyForMark(student.rowNumber, colA1);
-        if (marks.has(markKey)) return normalizeMark(marks.get(markKey));
-        return normalizeMark(student.currentValue);
-      }
-
-      function countAbsencesForData(data) {
-        const selected = data?.selected || {};
-        const colA1 = selected.dateColumn ? selected.dateColumn.a1Column : null;
-        if (!colA1) return 0;
-
-        return (data.students || []).filter(
-          (student) => getCurrentMarkForStudent(student, colA1) === "F"
-        ).length;
+      function getNomesValue(student, data) {
+        if (!student.nomesCell) return "";
+        return getValue(data.sheetNomes || "Nomes", student.nomesCell, student.nomesCurrentValue);
       }
 
       function setLoadedStatus(data) {
-        const totalStudents = (data.students || []).length;
-        const absentCount = countAbsencesForData(data);
-        setStatus(`${totalStudents} aluno(s) • ${absentCount} falta(s) marcada(s)`);
+        let f = 0, one = 0, two = 0;
+        for (const s of data.students || []) {
+          if (getFValue(s, data) === "F") f++;
+          const n = getNomesValue(s, data);
+          if (n === "1") one++;
+          if (n === "2") two++;
+        }
+        setStatus(`${(data.students || []).length} aluno(s) • F:${f} • 1:${one} • 2:${two}`);
       }
 
       function renderInfo(data) {
-        const selected = data.selected || {};
-        const dateColumn = selected.dateColumn;
-
-        const dateInfo = dateColumn
-          ? `Data ${selected.date} encontrada na coluna ${dateColumn.a1Column} (linha ${selected.dateHeaderRow})`
-          : `Data ${selected.date} nao encontrada`;
-
-        const turmaInfo = selected.turmaRow
-          ? `Turma em ${selected.turmaCell}`
-          : `Turma nao encontrada`;
-
-        const duplicateInfo =
-          selected.dateMatchesCount > 1
-            ? `Atencao: data repetida ${selected.dateMatchesCount}x (usando a 1a coluna).`
-            : "";
-
-        sheetInfoEl.innerHTML = `
-          <div><strong>${dateInfo}</strong></div>
-          <div>${turmaInfo}</div>
-          ${duplicateInfo ? `<div class="warn">${duplicateInfo}</div>` : ""}
-        `;
+        const c = data.selected || {};
+        const n = data.nomesSelection?.selected || {};
+        const cDate = c.dateColumn
+          ? `Nomes Chamada: data ${c.date} na coluna ${c.dateColumn.a1Column} (linha ${c.dateHeaderRow})`
+          : `Nomes Chamada: data ${c.date || ""} nao encontrada`;
+        const cTurma = c.turmaRow ? `Nomes Chamada: turma em ${c.turmaCell}` : "Nomes Chamada: turma nao encontrada";
+        const nDate = n.dateColumn
+          ? `Nomes: data ${n.date} na coluna ${n.dateColumn.a1Column} (linha ${n.dateHeaderRow})`
+          : `Nomes: data ${n.date || c.date || ""} nao encontrada`;
+        const nTurma = n.turmaRow ? `Nomes: turma em ${n.turmaCell}` : "Nomes: turma nao encontrada";
+        sheetInfoEl.innerHTML = `<div><strong>${cDate}</strong></div><div>${cTurma}</div><div>${nDate}</div><div>${nTurma}</div>`;
       }
 
-      async function saveMarkToSheet(cell, value) {
+      async function saveCell(sheet, cell, value) {
         const res = await fetch("/api/chamada/marcar", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ cell, value })
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sheet, cell, value })
         });
-
         let payload = null;
-        try {
-          payload = await res.json();
-        } catch (_err) {
-          payload = null;
-        }
-
-        if (!res.ok) {
-          throw new Error(
-            (payload && (payload.details || payload.error)) || "Erro ao gravar no Sheets"
-          );
-        }
-
+        try { payload = await res.json(); } catch (_e) {}
+        if (!res.ok) throw new Error((payload && (payload.details || payload.error)) || "Erro ao gravar");
         return payload;
       }
 
-      async function toggleAbsence(student, colA1, data) {
-        const markKey = keyForMark(student.rowNumber, colA1);
-        if (savingMarks.has(markKey)) return;
-
-        const cell = getStudentCell(student, colA1);
-        const isAbsent = getCurrentMarkForStudent(student, colA1) === "F";
-        const nextValue = isAbsent ? "" : "F";
-
-        savingMarks.add(markKey);
+      async function persistStudentCell({ sheet, cell, value, data, student, field }) {
+        const key = cellKey(sheet, cell);
+        if (savingCells.has(key)) return;
+        savingCells.add(key);
         renderStudents(data);
-        setStatus(`Salvando ${cell}...`);
-
+        setStatus(`Salvando ${sheet} ${cell}...`);
         try {
-          await saveMarkToSheet(cell, nextValue);
-
-          if (nextValue === "F") {
-            marks.set(markKey, "F");
-          } else {
-            marks.set(markKey, "");
-          }
-
-          student.currentValue = nextValue;
+          await saveCell(sheet, cell, value);
+          localCellValues.set(key, value);
+          student[field] = value;
         } catch (err) {
-          window.alert(`Nao foi possivel gravar ${cell}: ${err.message}`);
+          window.alert(`Nao foi possivel gravar ${cell} em ${sheet}: ${err.message}`);
         } finally {
-          savingMarks.delete(markKey);
+          savingCells.delete(key);
           renderStudents(data);
           setLoadedStatus(data);
         }
       }
 
+      function toggleF(student, data) {
+        const col = data?.selected?.dateColumn?.a1Column;
+        if (!col) return;
+        const sheet = data.sheet || "Nomes Chamada";
+        const cell = chamadaCell(student, col);
+        const next = getFValue(student, data) === "F" ? "" : "F";
+        return persistStudentCell({ sheet, cell, value: next, data, student, field: "currentValue" });
+      }
+
+      function setN1N2(student, data, value) {
+        if (!student.nomesCell) {
+          window.alert("Nao foi possivel localizar a celula correspondente na aba Nomes.");
+          return;
+        }
+        const sheet = data.sheetNomes || "Nomes";
+        const next = getNomesValue(student, data) === value ? "" : value;
+        return persistStudentCell({ sheet, cell: student.nomesCell, value: next, data, student, field: "nomesCurrentValue" });
+      }
+
       function renderStudents(data) {
         studentListEl.innerHTML = "";
-        const selected = data.selected || {};
-        const colA1 = selected.dateColumn ? selected.dateColumn.a1Column : null;
-
-        if (!selected.turmaRow) {
+        const col = data?.selected?.dateColumn?.a1Column;
+        if (!data?.selected?.turmaRow) {
           const li = document.createElement("li");
           li.className = "empty";
           li.textContent = "Turma nao encontrada na aba Nomes Chamada.";
           studentListEl.appendChild(li);
           return;
         }
-
-        if (!selected.dateColumn) {
+        if (!col) {
           const li = document.createElement("li");
           li.className = "empty";
           li.textContent = "Data nao encontrada no cabecalho da chamada.";
@@ -205,74 +177,66 @@
           return;
         }
 
-        students.forEach((student, index) => {
+        for (const [index, student] of students.entries()) {
           const li = document.createElement("li");
           li.className = "name-item student-item";
-          const markKey = keyForMark(student.rowNumber, colA1);
-          const isAbsent = getCurrentMarkForStudent(student, colA1) === "F";
-          const isSaving = savingMarks.has(markKey);
-          const cell = getStudentCell(student, colA1);
+          const fSheet = data.sheet || "Nomes Chamada";
+          const nSheet = data.sheetNomes || "Nomes";
+          const fCell = chamadaCell(student, col);
+          const fVal = getFValue(student, data);
+          const nVal = getNomesValue(student, data);
+          const fSaving = savingCells.has(cellKey(fSheet, fCell));
+          const nSaving = student.nomesCell ? savingCells.has(cellKey(nSheet, student.nomesCell)) : false;
+          const nDisabled = !student.nomesCell || !data?.nomesSelection?.selected?.dateColumn;
 
           li.innerHTML = `
             <span class="index">${index + 1}</span>
             <div class="student-main">
               <span class="text"></span>
-              <small class="meta">Linha ${student.rowNumber} • Celula ${cell}</small>
+              <small class="meta">Chamada ${fCell}${student.nomesCell ? ` • Nomes ${student.nomesCell}` : " • Nomes: nao encontrado"}</small>
             </div>
-            <button type="button" class="f-btn ${isAbsent ? "is-active" : ""}" aria-pressed="${isAbsent}" ${isSaving ? "disabled" : ""}>
-              ${isSaving ? "Salvando..." : isAbsent ? "Falta (F)" : "Marcar F"}
-            </button>
+            <div class="action-group">
+              <button type="button" class="f-btn ${fVal === "F" ? "is-active" : ""}" ${fSaving ? "disabled" : ""}>${fSaving ? "Salvando..." : fVal === "F" ? "Falta (F)" : "Marcar F"}</button>
+              <button type="button" class="num-btn ${nVal === "1" ? "is-one" : ""}" ${nDisabled || nSaving ? "disabled" : ""}>1</button>
+              <button type="button" class="num-btn ${nVal === "2" ? "is-two" : ""}" ${nDisabled || nSaving ? "disabled" : ""}>2</button>
+            </div>
           `;
 
           li.querySelector(".text").textContent = student.name;
-          li.querySelector(".f-btn").addEventListener("click", () => {
-            toggleAbsence(student, colA1, data);
-          });
-
+          const [fBtn, oneBtn, twoBtn] = li.querySelectorAll("button");
+          fBtn.addEventListener("click", () => toggleF(student, data));
+          oneBtn.addEventListener("click", () => !nDisabled && setN1N2(student, data, "1"));
+          twoBtn.addEventListener("click", () => !nDisabled && setN1N2(student, data, "2"));
           studentListEl.appendChild(li);
-        });
+        }
       }
 
       function syncFilters(data) {
         latestMeta = data;
-
-        const turmaOptions = data.turmaOptions || [];
         if (!turmaSelectEl.options.length) {
           turmaSelectEl.innerHTML = "";
-          turmaOptions.forEach((turma) => {
+          (data.turmaOptions || []).forEach((turma) => {
             const option = document.createElement("option");
             option.value = turma;
             option.textContent = turma;
             turmaSelectEl.appendChild(option);
           });
         }
-
-        if (!dateInputEl.value) {
-          dateInputEl.value = data.todaySuggestion || "";
-        }
-
-        if (data.selected?.turma) {
-          turmaSelectEl.value = data.selected.turma;
-        }
+        if (!dateInputEl.value) dateInputEl.value = data.todaySuggestion || "";
+        if (data.selected?.turma) turmaSelectEl.value = data.selected.turma;
       }
 
       async function loadChamada() {
         loadBtnEl.disabled = true;
         setStatus("Carregando...");
         sheetInfoEl.textContent = "Consultando planilha...";
-
         const params = new URLSearchParams();
         if (dateInputEl.value.trim()) params.set("date", dateInputEl.value.trim());
         if (turmaSelectEl.value.trim()) params.set("turma", turmaSelectEl.value.trim());
-
         try {
           const res = await fetch(`/api/chamada?${params.toString()}`, { cache: "no-store" });
           const data = await res.json();
-
-          if (!res.ok) {
-            throw new Error(data.details || data.error || "Erro ao carregar");
-          }
-
+          if (!res.ok) throw new Error(data.details || data.error || "Erro ao carregar");
           syncFilters(data);
           renderInfo(data);
           renderStudents(data);

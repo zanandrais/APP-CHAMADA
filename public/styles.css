@@ -242,6 +242,12 @@ body {
   font-size: 12px;
 }
 
+.action-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .f-btn {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.03);
@@ -262,6 +268,32 @@ body {
   border-color: rgba(255, 106, 106, 0.5);
   background: linear-gradient(135deg, rgba(255, 106, 106, 0.2), rgba(255, 76, 76, 0.08));
   color: #ffd7d7;
+}
+
+.num-btn {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  min-width: 44px;
+}
+
+.num-btn:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
+.num-btn.is-one {
+  border-color: rgba(89, 242, 255, 0.5);
+  background: linear-gradient(135deg, rgba(89, 242, 255, 0.18), rgba(89, 242, 255, 0.06));
+}
+
+.num-btn.is-two {
+  border-color: rgba(255, 209, 102, 0.55);
+  background: linear-gradient(135deg, rgba(255, 209, 102, 0.18), rgba(255, 209, 102, 0.06));
 }
 
 .empty {
@@ -290,5 +322,15 @@ body {
 
   .f-btn {
     width: 100%;
+  }
+
+  .action-group {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .num-btn {
+    flex: 1;
+    min-width: 0;
   }
 }
