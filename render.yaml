@@ -10,11 +10,7 @@ services:
         value: 2PACX-1vQL2uV2BS5DCGOlUQx4X2A7ABEWgC-c3CYA46B3S92pUG5H8VhFXta7qL00F3XjdqolkZ9jEPIqrp3Q
       - key: SHEET_TAB_NAME
         value: Nomes
-      - key: SHEET_CHAMADA_TAB_NAME
-        value: Nomes Chamada
       - key: SHEET_NOMES_GID
         value: "1958765595"
-      - key: SHEET_CHAMADA_GID
-        value: "934578770"
       - key: GOOGLE_SPREADSHEET_ID
         value: 1spXWVi4VD1wIkGVXMVdcLpm9dHAgCJ5CTCBgmpiUji8

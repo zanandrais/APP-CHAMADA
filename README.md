@@ -2,9 +2,9 @@
 
 App web para:
 - selecionar `data` e `turma`
-- localizar a coluna/linha na aba `Nomes Chamada`
+- localizar a coluna/linha na aba `Nomes`
 - listar alunos
-- marcar/desmarcar `F` (falta) diretamente no Google Sheets
+- marcar/desmarcar `F`, `1` e `2` diretamente no Google Sheets
 
 ## Rodar localmente
 
@@ -21,19 +21,19 @@ Use o `render.yaml` ou configure manualmente:
 - Build Command: `npm install`
 - Start Command: `npm start`
 
-## Variáveis de ambiente (leitura)
+## Variaveis de ambiente (leitura)
 
 - `SHEET_PUBLISH_ID`
-- `SHEET_CHAMADA_TAB_NAME` (padrão: `Nomes Chamada`)
-- `SHEET_CHAMADA_GID` (aba `Nomes Chamada`)
+- `SHEET_TAB_NAME` (padrao: `Nomes`)
+- `SHEET_NOMES_GID` (aba `Nomes`)
 
-## Variáveis para gravação no Google Sheets
+## Variaveis para gravacao no Google Sheets
 
 - `GOOGLE_SPREADSHEET_ID`
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
 - `GOOGLE_PRIVATE_KEY`
 
-## Como habilitar a gravação (botão F)
+## Como habilitar a gravacao
 
 1. No Google Cloud, crie um projeto.
 2. Ative a `Google Sheets API`.
@@ -44,11 +44,11 @@ Use o `render.yaml` ou configure manualmente:
    - `GOOGLE_SERVICE_ACCOUNT_EMAIL` (campo `client_email` do JSON)
    - `GOOGLE_PRIVATE_KEY` (campo `private_key` do JSON)
 
-Observação:
-- Se colar a chave no Render com `\n`, o backend já converte automaticamente.
+Observacao:
+- Se colar a chave no Render com `\n`, o backend ja converte automaticamente.
 
 ## Endpoints
 
 - `GET /` interface de chamada
 - `GET /api/chamada` leitura de data/turma/alunos
-- `POST /api/chamada/marcar` grava `F` ou limpa uma célula (`{ "cell": "F23", "value": "F" }`)
+- `POST /api/chamada/marcar` grava `F`, `1`, `2` ou limpa uma celula (`{ "cell": "F23", "value": "F" }`)

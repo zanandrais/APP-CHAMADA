@@ -12,8 +12,7 @@
         <p class="tag">Google Sheets + Render</p>
         <h1>Chamada por Turma</h1>
         <p class="subtitle">
-          Selecione data e turma para usar <strong>Nomes Chamada</strong> (F) e
-          <strong>Nomes</strong> (1/2).
+          Selecione data e turma para usar <strong>Nomes</strong> (F, 1 e 2).
         </p>
       </section>
 
@@ -57,50 +56,39 @@
       const norm = (v) => String(v || "").trim().toUpperCase();
       const cellKey = (sheet, cell) => `${sheet}|${cell}`;
       const setStatus = (text) => (statusEl.textContent = text);
-      const chamadaCell = (student, col) => `${col}${student.rowNumber}`;
+      const studentCell = (student, col) => student.cell || `${col}${student.rowNumber}`;
 
       function getValue(sheet, cell, fallback) {
         const key = cellKey(sheet, cell);
         return localCellValues.has(key) ? norm(localCellValues.get(key)) : norm(fallback);
       }
 
-      function getFValue(student, data) {
+      function getCellValue(student, data) {
         const col = data?.selected?.dateColumn?.a1Column;
         if (!col) return "";
-        return getValue(data.sheet || "Nomes Chamada", chamadaCell(student, col), student.currentValue);
-      }
-
-      function getNomesValue(student, data) {
-        if (!student.nomesCell) return "";
-        return getValue(data.sheetNomes || "Nomes", student.nomesCell, student.nomesCurrentValue);
+        const sheet = data?.sheet || "Nomes";
+        const cell = studentCell(student, col);
+        return getValue(sheet, cell, student.currentValue);
       }
 
       function setLoadedStatus(data) {
         let f = 0, one = 0, two = 0;
         for (const s of data.students || []) {
-          if (getFValue(s, data) === "F") f++;
-          const n = getNomesValue(s, data);
-          if (n === "1") one++;
-          if (n === "2") two++;
+          const current = getCellValue(s, data);
+          if (current === "F") f++;
+          if (current === "1") one++;
+          if (current === "2") two++;
         }
         setStatus(`${(data.students || []).length} aluno(s) • F:${f} • 1:${one} • 2:${two}`);
       }
 
       function renderInfo(data) {
         const c = data.selected || {};
-        const n = data.nomesSelection?.selected || {};
         const cDate = c.dateColumn
-          ? `Nomes Chamada: data ${c.date} na coluna ${c.dateColumn.a1Column} (linha ${c.dateHeaderRow})`
-          : `Nomes Chamada: data ${c.date || ""} nao encontrada`;
-        const cTurma = c.turmaRow ? `Nomes Chamada: turma em ${c.turmaCell}` : "Nomes Chamada: turma nao encontrada";
-        const nDate = n.dateColumn
-          ? `Nomes: data ${n.date} na coluna ${n.dateColumn.a1Column} (linha ${n.dateHeaderRow})`
-          : `Nomes: data ${n.date || c.date || ""} nao encontrada`;
-        const nTurma = n.turmaRow ? `Nomes: turma em ${n.turmaCell}` : "Nomes: turma nao encontrada";
-        const nomesWarning = data.nomesSelectionError
-          ? `<div class="warn">Aba Nomes indisponivel agora: ${data.nomesSelectionError}</div>`
-          : "";
-        sheetInfoEl.innerHTML = `<div><strong>${cDate}</strong></div><div>${cTurma}</div><div>${nDate}</div><div>${nTurma}</div>${nomesWarning}`;
+          ? `Nomes: data ${c.date} na coluna ${c.dateColumn.a1Column} (linha ${c.dateHeaderRow})`
+          : `Nomes: data ${c.date || ""} nao encontrada`;
+        const cTurma = c.turmaRow ? `Nomes: turma em ${c.turmaCell}` : "Nomes: turma nao encontrada";
+        sheetInfoEl.innerHTML = `<div><strong>${cDate}</strong></div><div>${cTurma}</div>`;
       }
 
       async function saveCell(sheet, cell, value) {
@@ -137,20 +125,22 @@
       function toggleF(student, data) {
         const col = data?.selected?.dateColumn?.a1Column;
         if (!col) return;
-        const sheet = data.sheet || "Nomes Chamada";
-        const cell = chamadaCell(student, col);
-        const next = getFValue(student, data) === "F" ? "" : "F";
+        const sheet = data.sheet || "Nomes";
+        const cell = studentCell(student, col);
+        const next = getCellValue(student, data) === "F" ? "" : "F";
         return persistStudentCell({ sheet, cell, value: next, data, student, field: "currentValue" });
       }
 
       function setN1N2(student, data, value) {
-        if (!student.nomesCell) {
-          window.alert("Nao foi possivel localizar a celula correspondente na aba Nomes.");
+        const col = data?.selected?.dateColumn?.a1Column;
+        if (!col) {
+          window.alert("Nao foi possivel localizar a data correspondente na aba Nomes.");
           return;
         }
-        const sheet = data.sheetNomes || "Nomes";
-        const next = getNomesValue(student, data) === value ? "" : value;
-        return persistStudentCell({ sheet, cell: student.nomesCell, value: next, data, student, field: "nomesCurrentValue" });
+        const sheet = data.sheet || "Nomes";
+        const cell = studentCell(student, col);
+        const next = getCellValue(student, data) === value ? "" : value;
+        return persistStudentCell({ sheet, cell, value: next, data, student, field: "currentValue" });
       }
 
       function renderStudents(data) {
@@ -159,14 +149,14 @@
         if (!data?.selected?.turmaRow) {
           const li = document.createElement("li");
           li.className = "empty";
-          li.textContent = "Turma nao encontrada na aba Nomes Chamada.";
+          li.textContent = "Turma nao encontrada na aba Nomes.";
           studentListEl.appendChild(li);
           return;
         }
         if (!col) {
           const li = document.createElement("li");
           li.className = "empty";
-          li.textContent = "Data nao encontrada no cabecalho da chamada.";
+          li.textContent = "Data nao encontrada na aba Nomes.";
           studentListEl.appendChild(li);
           return;
         }
@@ -183,20 +173,21 @@
         for (const [index, student] of students.entries()) {
           const li = document.createElement("li");
           li.className = "name-item student-item";
-          const fSheet = data.sheet || "Nomes Chamada";
-          const nSheet = data.sheetNomes || "Nomes";
-          const fCell = chamadaCell(student, col);
-          const fVal = getFValue(student, data);
-          const nVal = getNomesValue(student, data);
-          const fSaving = savingCells.has(cellKey(fSheet, fCell));
-          const nSaving = student.nomesCell ? savingCells.has(cellKey(nSheet, student.nomesCell)) : false;
-          const nDisabled = !student.nomesCell || !data?.nomesSelection?.selected?.dateColumn;
+          const sheet = data.sheet || "Nomes";
+          const cell = studentCell(student, col);
+          const currentValue = getCellValue(student, data);
+          const saving = savingCells.has(cellKey(sheet, cell));
+          const fVal = currentValue;
+          const nVal = currentValue;
+          const fSaving = saving;
+          const nSaving = saving;
+          const nDisabled = false;
 
           li.innerHTML = `
             <span class="index">${index + 1}</span>
             <div class="student-main">
               <span class="text"></span>
-              <small class="meta">Chamada ${fCell}${student.nomesCell ? ` • Nomes ${student.nomesCell}` : " • Nomes: nao encontrado"}</small>
+              <small class="meta">Nomes ${cell}</small>
             </div>
             <div class="action-group">
               <button type="button" class="f-btn ${fVal === "F" ? "is-active" : ""}" ${fSaving ? "disabled" : ""}>${fSaving ? "Salvando..." : fVal === "F" ? "Falta (F)" : "Marcar F"}</button>

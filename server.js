@@ -10,8 +10,6 @@ const SHEET_PUBLISH_ID =
   "2PACX-1vQL2uV2BS5DCGOlUQx4X2A7ABEWgC-c3CYA46B3S92pUG5H8VhFXta7qL00F3XjdqolkZ9jEPIqrp3Q";
 const SHEET_TAB_NAME = process.env.SHEET_TAB_NAME || "Nomes";
 const SHEET_NOMES_GID = process.env.SHEET_NOMES_GID || "1958765595";
-const SHEET_CHAMADA_TAB_NAME = process.env.SHEET_CHAMADA_TAB_NAME || "Nomes Chamada";
-const SHEET_CHAMADA_GID = process.env.SHEET_CHAMADA_GID || "934578770";
 const GOOGLE_SPREADSHEET_ID =
   process.env.GOOGLE_SPREADSHEET_ID || "1spXWVi4VD1wIkGVXMVdcLpm9dHAgCJ5CTCBgmpiUji8";
 const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "";
@@ -516,7 +514,10 @@ function buildTurmaSelectionData(rows, sheetName, selectedDate, selectedTurma, o
     rows,
     studentStartRowIndex,
     selectedDateColumn ? selectedDateColumn.colIndex : undefined
-  );
+  ).map((student) => ({
+    ...student,
+    cell: selectedDateColumn ? `${selectedDateColumn.a1Column}${student.rowNumber}` : null
+  }));
 
   return {
     sheet: sheetName,
@@ -665,58 +666,27 @@ async function fetchNomesSheetRows() {
   throw lastError || new Error(`Nao foi possivel localizar a aba "${SHEET_TAB_NAME}".`);
 }
 
-async function fetchChamadaSheetRows() {
-  return fetchPublishedTabRowsByGid(SHEET_CHAMADA_TAB_NAME, SHEET_CHAMADA_GID);
-}
-
 async function fetchChamadaData(selectedDate, selectedTurma) {
   const todaySuggestion = formatTodayPtBrShort();
   const chosenDate = String(selectedDate || todaySuggestion).trim();
   const chosenTurma = String(selectedTurma || TURMA_OPTIONS[0]).trim();
-  const chamadaSource = await fetchChamadaSheetRows();
-
-  const chamadaSelection = buildTurmaSelectionData(
-    chamadaSource.rows,
-    SHEET_CHAMADA_TAB_NAME,
+  const nomesSource = await fetchNomesSheetRows();
+  const nomesSelection = buildTurmaSelectionData(
+    nomesSource.rows,
+    SHEET_TAB_NAME,
     chosenDate,
-    chosenTurma
+    chosenTurma,
+    { dateRowMode: "turma_row" }
   );
-  let nomesSource = null;
-  let nomesSelection = null;
-  let nomesSelectionError = "";
-
-  try {
-    nomesSource = await fetchNomesSheetRows();
-    nomesSelection = buildTurmaSelectionData(
-      nomesSource.rows,
-      SHEET_TAB_NAME,
-      chosenDate,
-      chosenTurma,
-      { dateRowMode: "turma_row" }
-    );
-  } catch (error) {
-    nomesSelectionError = error.message;
-  }
-
-  const mergedStudents = mergeStudentsWithNomes(chamadaSelection.students, nomesSelection);
 
   return {
-    sourceUrl: chamadaSource.sourceUrl,
-    sourceUrlNomes: nomesSource ? nomesSource.sourceUrl : "",
-    sheet: SHEET_CHAMADA_TAB_NAME,
-    sheetNomes: SHEET_TAB_NAME,
+    sourceUrl: nomesSource.sourceUrl,
+    sheet: SHEET_TAB_NAME,
     todaySuggestion,
     turmaOptions: TURMA_OPTIONS,
-    availableDates: chamadaSelection.availableDates,
-    selected: chamadaSelection.selected,
-    nomesSelection: nomesSelection
-      ? {
-          selected: nomesSelection.selected,
-          availableDates: nomesSelection.availableDates
-        }
-      : null,
-    nomesSelectionError,
-    students: mergedStudents
+    availableDates: nomesSelection.availableDates,
+    selected: nomesSelection.selected,
+    students: nomesSelection.students
   };
 }
 
@@ -809,7 +779,7 @@ app.get("/api/chamada", async (req, res) => {
     res.json(data);
   } catch (error) {
     res.status(500).json({
-      error: "Falha ao carregar dados da aba Nomes Chamada.",
+      error: "Falha ao carregar dados da aba Nomes.",
       details: error.message
     });
   }
@@ -817,7 +787,7 @@ app.get("/api/chamada", async (req, res) => {
 
 app.post("/api/chamada/marcar", async (req, res) => {
   try {
-    const sheet = String(req.body?.sheet || SHEET_CHAMADA_TAB_NAME).trim();
+    const sheet = String(req.body?.sheet || SHEET_TAB_NAME).trim();
     const cell = String(req.body?.cell || "")
       .trim()
       .toUpperCase();
@@ -831,28 +801,15 @@ app.post("/api/chamada/marcar", async (req, res) => {
       });
     }
 
-    const allowedSheets = new Set([SHEET_CHAMADA_TAB_NAME, SHEET_TAB_NAME]);
-    if (!allowedSheets.has(sheet)) {
+    if (sheet !== SHEET_TAB_NAME) {
       return res.status(400).json({
-        error: "Aba invalida para gravacao."
+        error: `Apenas a aba ${SHEET_TAB_NAME} pode ser gravada.`
       });
     }
 
     if (!["", "F", "1", "2"].includes(value)) {
       return res.status(400).json({
         error: "Valor invalido. Use 'F', '1', '2' ou vazio para limpar."
-      });
-    }
-
-    if (sheet === SHEET_CHAMADA_TAB_NAME && value !== "" && value !== "F") {
-      return res.status(400).json({
-        error: "Na aba Nomes Chamada, use apenas 'F' ou vazio."
-      });
-    }
-
-    if (sheet === SHEET_TAB_NAME && value !== "" && value !== "1" && value !== "2") {
-      return res.status(400).json({
-        error: "Na aba Nomes, use apenas '1', '2' ou vazio."
       });
     }
 
