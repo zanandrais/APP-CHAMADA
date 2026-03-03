@@ -180,7 +180,9 @@ function normalizeDateLabel(value) {
   const text = String(value || "").trim();
   if (!text) return "";
 
-  const match = text.match(/^0*(\d{1,2})\s*[\/\-.]\s*0*(\d{1,2})$/);
+  const match = text.match(
+    /^0*(\d{1,2})\s*[\/\-.]\s*0*(\d{1,2})(?:\s*[\/\-.]\s*\d{2,4})?$/
+  );
   if (!match) return text;
 
   const day = Number(match[1]);
@@ -353,6 +355,45 @@ function extractDateColumns(rows) {
   return extractDateColumnsFromRow(row, headerRowIndex);
 }
 
+function extractDateColumnsNearTurma(rows, turmaRowIndex, selectedDate) {
+  if (turmaRowIndex < 0) {
+    return { dateRowIndex: -1, dates: [] };
+  }
+
+  const candidateIndexes = [
+    turmaRowIndex,
+    turmaRowIndex + 1,
+    turmaRowIndex + 2,
+    turmaRowIndex - 1
+  ].filter((rowIndex, index, list) => {
+    return rowIndex >= 0 && rowIndex < rows.length && list.indexOf(rowIndex) === index;
+  });
+
+  const candidates = candidateIndexes
+    .map((rowIndex) => extractDateColumnsFromRow(rows[rowIndex] || [], rowIndex))
+    .filter((candidate) => candidate.dates.length > 0);
+
+  if (!candidates.length) {
+    return { dateRowIndex: -1, dates: [] };
+  }
+
+  const withSelectedDate = candidates.filter((candidate) =>
+    candidate.dates.some((date) => date.value === selectedDate)
+  );
+  const rankedCandidates = withSelectedDate.length ? withSelectedDate : candidates;
+
+  rankedCandidates.sort((a, b) => {
+    const aDistance = Math.abs(a.dateRowIndex - turmaRowIndex);
+    const bDistance = Math.abs(b.dateRowIndex - turmaRowIndex);
+
+    if (aDistance !== bDistance) return aDistance - bDistance;
+    if (a.dates.length !== b.dates.length) return b.dates.length - a.dates.length;
+    return a.dateRowIndex - b.dateRowIndex;
+  });
+
+  return rankedCandidates[0];
+}
+
 function findTurmaRow(rows, turmaSelection) {
   const normalizedSelection = normalizeText(turmaSelection);
   const aliases = TURMA_ALIASES[normalizedSelection] || [normalizedSelection];
@@ -422,11 +463,11 @@ function isKnownTurmaLabel(cellA) {
   return allAliases.includes(normalized);
 }
 
-function extractStudentsForTurma(rows, turmaRowIndex, dateColIndex) {
-  if (turmaRowIndex < 0) return [];
+function extractStudentsForTurma(rows, startRowIndex, dateColIndex) {
+  if (startRowIndex < 0) return [];
   const students = [];
 
-  for (let i = turmaRowIndex + 1; i < rows.length; i++) {
+  for (let i = startRowIndex + 1; i < rows.length; i++) {
     const row = rows[i] || [];
     const name = String(row[0] || "").trim();
     const rowHasAnyValue = row.some((cell) => String(cell || "").trim() !== "");
@@ -465,14 +506,15 @@ function buildTurmaSelectionData(rows, sheetName, selectedDate, selectedTurma, o
   const useTurmaRowForDates = options.dateRowMode === "turma_row";
   const dateSource =
     useTurmaRowForDates && turmaRowIndex >= 0
-      ? extractDateColumnsFromRow(rows[turmaRowIndex] || [], turmaRowIndex)
+      ? extractDateColumnsNearTurma(rows, turmaRowIndex, normalizedSelectedDate)
       : extractDateColumns(rows);
   const { dateRowIndex, dates } = dateSource;
   const dateMatches = dates.filter((d) => d.value === normalizedSelectedDate);
   const selectedDateColumn = dateMatches[0] || null;
+  const studentStartRowIndex = Math.max(turmaRowIndex, dateRowIndex);
   const students = extractStudentsForTurma(
     rows,
-    turmaRowIndex,
+    studentStartRowIndex,
     selectedDateColumn ? selectedDateColumn.colIndex : undefined
   );
 
