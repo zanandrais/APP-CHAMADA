@@ -296,6 +296,11 @@ body {
   background: linear-gradient(135deg, rgba(255, 209, 102, 0.18), rgba(255, 209, 102, 0.06));
 }
 
+.num-btn.is-three {
+  border-color: rgba(161, 255, 117, 0.55);
+  background: linear-gradient(135deg, rgba(161, 255, 117, 0.18), rgba(161, 255, 117, 0.06));
+}
+
 .empty {
   color: var(--muted);
 }

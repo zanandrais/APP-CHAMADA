@@ -807,9 +807,9 @@ app.post("/api/chamada/marcar", async (req, res) => {
       });
     }
 
-    if (!["", "F", "1", "2"].includes(value)) {
+    if (!["", "F", "1", "2", "3"].includes(value)) {
       return res.status(400).json({
-        error: "Valor invalido. Use 'F', '1', '2' ou vazio para limpar."
+        error: "Valor invalido. Use 'F', '1', '2', '3' ou vazio para limpar."
       });
     }
 

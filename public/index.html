@@ -72,14 +72,15 @@
       }
 
       function setLoadedStatus(data) {
-        let f = 0, one = 0, two = 0;
+        let f = 0, one = 0, two = 0, three = 0;
         for (const s of data.students || []) {
           const current = getCellValue(s, data);
           if (current === "F") f++;
           if (current === "1") one++;
           if (current === "2") two++;
+          if (current === "3") three++;
         }
-        setStatus(`${(data.students || []).length} aluno(s) • F:${f} • 1:${one} • 2:${two}`);
+        setStatus(`${(data.students || []).length} aluno(s) • F:${f} • 1:${one} • 2:${two} • 3:${three}`);
       }
 
       function renderInfo(data) {
@@ -131,7 +132,7 @@
         return persistStudentCell({ sheet, cell, value: next, data, student, field: "currentValue" });
       }
 
-      function setN1N2(student, data, value) {
+      function setMarker(student, data, value) {
         const col = data?.selected?.dateColumn?.a1Column;
         if (!col) {
           window.alert("Nao foi possivel localizar a data correspondente na aba Nomes.");
@@ -179,9 +180,12 @@
           const saving = savingCells.has(cellKey(sheet, cell));
           const fVal = currentValue;
           const nVal = currentValue;
+          const tVal = currentValue;
           const fSaving = saving;
           const nSaving = saving;
+          const tSaving = saving;
           const nDisabled = false;
+          const tDisabled = false;
 
           li.innerHTML = `
             <span class="index">${index + 1}</span>
@@ -193,14 +197,16 @@
               <button type="button" class="f-btn ${fVal === "F" ? "is-active" : ""}" ${fSaving ? "disabled" : ""}>${fSaving ? "Salvando..." : fVal === "F" ? "Falta (F)" : "Marcar F"}</button>
               <button type="button" class="num-btn ${nVal === "1" ? "is-one" : ""}" ${nDisabled || nSaving ? "disabled" : ""}>1</button>
               <button type="button" class="num-btn ${nVal === "2" ? "is-two" : ""}" ${nDisabled || nSaving ? "disabled" : ""}>2</button>
+              <button type="button" class="num-btn ${tVal === "3" ? "is-three" : ""}" ${tDisabled || tSaving ? "disabled" : ""}>3</button>
             </div>
           `;
 
           li.querySelector(".text").textContent = student.name;
-          const [fBtn, oneBtn, twoBtn] = li.querySelectorAll("button");
+          const [fBtn, oneBtn, twoBtn, threeBtn] = li.querySelectorAll("button");
           fBtn.addEventListener("click", () => toggleF(student, data));
-          oneBtn.addEventListener("click", () => !nDisabled && setN1N2(student, data, "1"));
-          twoBtn.addEventListener("click", () => !nDisabled && setN1N2(student, data, "2"));
+          oneBtn.addEventListener("click", () => !nDisabled && setMarker(student, data, "1"));
+          twoBtn.addEventListener("click", () => !nDisabled && setMarker(student, data, "2"));
+          threeBtn.addEventListener("click", () => !tDisabled && setMarker(student, data, "3"));
           studentListEl.appendChild(li);
         }
       }

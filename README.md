@@ -4,7 +4,7 @@ App web para:
 - selecionar `data` e `turma`
 - localizar a coluna/linha na aba `Nomes`
 - listar alunos
-- marcar/desmarcar `F`, `1` e `2` diretamente no Google Sheets
+- marcar/desmarcar `F`, `1`, `2` e `3` diretamente no Google Sheets
 
 ## Rodar localmente
 
@@ -51,4 +51,4 @@ Observacao:
 
 - `GET /` interface de chamada
 - `GET /api/chamada` leitura de data/turma/alunos
-- `POST /api/chamada/marcar` grava `F`, `1`, `2` ou limpa uma celula (`{ "cell": "F23", "value": "F" }`)
+- `POST /api/chamada/marcar` grava `F`, `1`, `2`, `3` ou limpa uma celula (`{ "cell": "F23", "value": "F" }`)
