@@ -97,7 +97,10 @@
           ? `Nomes: data ${n.date} na coluna ${n.dateColumn.a1Column} (linha ${n.dateHeaderRow})`
           : `Nomes: data ${n.date || c.date || ""} nao encontrada`;
         const nTurma = n.turmaRow ? `Nomes: turma em ${n.turmaCell}` : "Nomes: turma nao encontrada";
-        sheetInfoEl.innerHTML = `<div><strong>${cDate}</strong></div><div>${cTurma}</div><div>${nDate}</div><div>${nTurma}</div>`;
+        const nomesWarning = data.nomesSelectionError
+          ? `<div class="warn">Aba Nomes indisponivel agora: ${data.nomesSelectionError}</div>`
+          : "";
+        sheetInfoEl.innerHTML = `<div><strong>${cDate}</strong></div><div>${cTurma}</div><div>${nDate}</div><div>${nTurma}</div>${nomesWarning}`;
       }
 
       async function saveCell(sheet, cell, value) {

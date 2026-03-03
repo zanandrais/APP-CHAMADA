@@ -12,6 +12,8 @@ services:
         value: Nomes
       - key: SHEET_CHAMADA_TAB_NAME
         value: Nomes Chamada
+      - key: SHEET_NOMES_GID
+        value: "1958765595"
       - key: SHEET_CHAMADA_GID
         value: "934578770"
       - key: GOOGLE_SPREADSHEET_ID

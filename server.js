@@ -9,6 +9,7 @@ const SHEET_PUBLISH_ID =
   process.env.SHEET_PUBLISH_ID ||
   "2PACX-1vQL2uV2BS5DCGOlUQx4X2A7ABEWgC-c3CYA46B3S92pUG5H8VhFXta7qL00F3XjdqolkZ9jEPIqrp3Q";
 const SHEET_TAB_NAME = process.env.SHEET_TAB_NAME || "Nomes";
+const SHEET_NOMES_GID = process.env.SHEET_NOMES_GID || "1958765595";
 const SHEET_CHAMADA_TAB_NAME = process.env.SHEET_CHAMADA_TAB_NAME || "Nomes Chamada";
 const SHEET_CHAMADA_GID = process.env.SHEET_CHAMADA_GID || "934578770";
 const GOOGLE_SPREADSHEET_ID =
@@ -58,6 +59,17 @@ function extractNamesFromTable(table) {
   }
 
   return names;
+}
+
+function extractRowsFromGoogleVizTable(table) {
+  if (!table || !Array.isArray(table.rows)) {
+    return [];
+  }
+
+  return table.rows.map((row) => {
+    const cells = Array.isArray(row?.c) ? row.c : [];
+    return cells.map((cell) => normalizeCellValue(cell));
+  });
 }
 
 function decodeHtml(text) {
@@ -162,6 +174,20 @@ function normalizeText(value) {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+function normalizeDateLabel(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  const match = text.match(/^0*(\d{1,2})\s*[\/\-.]\s*0*(\d{1,2})$/);
+  if (!match) return text;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+
+  if (!day || !month) return text;
+  return `${day}/${month}`;
 }
 
 function toA1Column(colIndexZeroBased) {
@@ -300,17 +326,12 @@ function findDateHeaderRow(rows) {
   return rows.findIndex((row) => normalizeText(row[0]) === "turma");
 }
 
-function extractDateColumns(rows) {
-  const headerRowIndex = findDateHeaderRow(rows);
-  if (headerRowIndex === -1) return { headerRowIndex: -1, dates: [] };
-
-  const row = rows[headerRowIndex] || [];
-  const datePattern = /^\d{1,2}\/\d{1,2}$/;
+function extractDateColumnsFromRow(row, rowIndex) {
   const dates = [];
 
   for (let col = 0; col < row.length; col++) {
-    const raw = String(row[col] || "").trim();
-    if (!datePattern.test(raw)) continue;
+    const raw = normalizeDateLabel(row[col]);
+    if (!/^\d{1,2}\/\d{1,2}$/.test(raw)) continue;
     dates.push({
       value: raw,
       colIndex: col,
@@ -318,7 +339,18 @@ function extractDateColumns(rows) {
     });
   }
 
-  return { headerRowIndex, dates };
+  return {
+    dateRowIndex: rowIndex,
+    dates
+  };
+}
+
+function extractDateColumns(rows) {
+  const headerRowIndex = findDateHeaderRow(rows);
+  if (headerRowIndex === -1) return { dateRowIndex: -1, dates: [] };
+
+  const row = rows[headerRowIndex] || [];
+  return extractDateColumnsFromRow(row, headerRowIndex);
 }
 
 function findTurmaRow(rows, turmaSelection) {
@@ -425,14 +457,19 @@ function extractStudentsForTurma(rows, turmaRowIndex, dateColIndex) {
   return students;
 }
 
-function buildTurmaSelectionData(rows, sheetName, selectedDate, selectedTurma) {
-  const { headerRowIndex, dates } = extractDateColumns(rows);
-  const dateMatches = dates.filter((d) => d.value === selectedDate);
-  const selectedDateColumn = dateMatches[0] || null;
-
+function buildTurmaSelectionData(rows, sheetName, selectedDate, selectedTurma, options = {}) {
+  const normalizedSelectedDate = normalizeDateLabel(selectedDate);
   const turmaRowIndex = findTurmaRow(rows, selectedTurma);
   const turmaRowNumber = turmaRowIndex >= 0 ? turmaRowIndex + 1 : null;
   const turmaCell = turmaRowNumber ? `A${turmaRowNumber}` : null;
+  const useTurmaRowForDates = options.dateRowMode === "turma_row";
+  const dateSource =
+    useTurmaRowForDates && turmaRowIndex >= 0
+      ? extractDateColumnsFromRow(rows[turmaRowIndex] || [], turmaRowIndex)
+      : extractDateColumns(rows);
+  const { dateRowIndex, dates } = dateSource;
+  const dateMatches = dates.filter((d) => d.value === normalizedSelectedDate);
+  const selectedDateColumn = dateMatches[0] || null;
   const students = extractStudentsForTurma(
     rows,
     turmaRowIndex,
@@ -444,10 +481,11 @@ function buildTurmaSelectionData(rows, sheetName, selectedDate, selectedTurma) {
     availableDates: dates.map((d) => d.value),
     selected: {
       date: selectedDate,
+      normalizedDate: normalizedSelectedDate,
       turma: selectedTurma,
       dateColumn: selectedDateColumn,
       dateMatchesCount: dateMatches.length,
-      dateHeaderRow: headerRowIndex >= 0 ? headerRowIndex + 1 : null,
+      dateHeaderRow: dateRowIndex >= 0 ? dateRowIndex + 1 : null,
       turmaRow: turmaRowNumber,
       turmaCell
     },
@@ -538,6 +576,53 @@ async function fetchPublishedTabRowsByName(tabName) {
   return fetchPublishedTabRowsByGid(tabName, gid);
 }
 
+async function fetchTabRowsByGviz(tabName) {
+  const url = `https://docs.google.com/spreadsheets/d/e/${SHEET_PUBLISH_ID}/gviz/tq?sheet=${encodeURIComponent(
+    tabName
+  )}&tqx=out:json`;
+
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Erro ao consultar Google Sheets (${tabName}): ${response.status}`);
+  }
+
+  const text = await response.text();
+  const payload = parseGoogleVizResponse(text);
+
+  return {
+    rows: extractRowsFromGoogleVizTable(payload.table),
+    sourceUrl: url
+  };
+}
+
+async function fetchNomesSheetRows() {
+  const attempts = [];
+
+  if (SHEET_NOMES_GID) {
+    attempts.push(() => fetchPublishedTabRowsByGid(SHEET_TAB_NAME, SHEET_NOMES_GID));
+  }
+
+  attempts.push(() => fetchTabRowsByGviz(SHEET_TAB_NAME));
+  attempts.push(() => fetchPublishedTabRowsByName(SHEET_TAB_NAME));
+
+  let lastError = null;
+
+  for (const attempt of attempts) {
+    try {
+      return await attempt();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error(`Nao foi possivel localizar a aba "${SHEET_TAB_NAME}".`);
+}
+
 async function fetchChamadaSheetRows() {
   return fetchPublishedTabRowsByGid(SHEET_CHAMADA_TAB_NAME, SHEET_CHAMADA_GID);
 }
@@ -546,10 +631,7 @@ async function fetchChamadaData(selectedDate, selectedTurma) {
   const todaySuggestion = formatTodayPtBrShort();
   const chosenDate = String(selectedDate || todaySuggestion).trim();
   const chosenTurma = String(selectedTurma || TURMA_OPTIONS[0]).trim();
-  const [chamadaSource, nomesSource] = await Promise.all([
-    fetchChamadaSheetRows(),
-    fetchPublishedTabRowsByName(SHEET_TAB_NAME)
-  ]);
+  const chamadaSource = await fetchChamadaSheetRows();
 
   const chamadaSelection = buildTurmaSelectionData(
     chamadaSource.rows,
@@ -557,27 +639,41 @@ async function fetchChamadaData(selectedDate, selectedTurma) {
     chosenDate,
     chosenTurma
   );
-  const nomesSelection = buildTurmaSelectionData(
-    nomesSource.rows,
-    SHEET_TAB_NAME,
-    chosenDate,
-    chosenTurma
-  );
+  let nomesSource = null;
+  let nomesSelection = null;
+  let nomesSelectionError = "";
+
+  try {
+    nomesSource = await fetchNomesSheetRows();
+    nomesSelection = buildTurmaSelectionData(
+      nomesSource.rows,
+      SHEET_TAB_NAME,
+      chosenDate,
+      chosenTurma,
+      { dateRowMode: "turma_row" }
+    );
+  } catch (error) {
+    nomesSelectionError = error.message;
+  }
+
   const mergedStudents = mergeStudentsWithNomes(chamadaSelection.students, nomesSelection);
 
   return {
     sourceUrl: chamadaSource.sourceUrl,
-    sourceUrlNomes: nomesSource.sourceUrl,
+    sourceUrlNomes: nomesSource ? nomesSource.sourceUrl : "",
     sheet: SHEET_CHAMADA_TAB_NAME,
     sheetNomes: SHEET_TAB_NAME,
     todaySuggestion,
     turmaOptions: TURMA_OPTIONS,
     availableDates: chamadaSelection.availableDates,
     selected: chamadaSelection.selected,
-    nomesSelection: {
-      selected: nomesSelection.selected,
-      availableDates: nomesSelection.availableDates
-    },
+    nomesSelection: nomesSelection
+      ? {
+          selected: nomesSelection.selected,
+          availableDates: nomesSelection.availableDates
+        }
+      : null,
+    nomesSelectionError,
     students: mergedStudents
   };
 }
