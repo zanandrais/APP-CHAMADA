@@ -30,6 +30,11 @@ body {
   padding: 32px 18px 60px;
 }
 
+.view-stack {
+  display: grid;
+  gap: 18px;
+}
+
 .hero {
   text-align: center;
   margin-bottom: 22px;
@@ -59,6 +64,35 @@ body {
 .subtitle {
   margin: 0 0 14px;
   color: var(--muted);
+}
+
+.tab-nav {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.tab-btn {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab-btn.is-active {
+  border-color: rgba(89, 242, 255, 0.5);
+  background: linear-gradient(135deg, rgba(89, 242, 255, 0.18), rgba(89, 242, 255, 0.06));
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.is-active {
+  display: block;
 }
 
 #reloadBtn {
@@ -301,6 +335,24 @@ body {
   background: linear-gradient(135deg, rgba(161, 255, 117, 0.18), rgba(161, 255, 117, 0.06));
 }
 
+.link-btn {
+  border: 1px solid rgba(89, 242, 255, 0.45);
+  background: linear-gradient(135deg, rgba(89, 242, 255, 0.2), rgba(89, 242, 255, 0.07));
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 700;
+  text-decoration: none;
+  min-width: 105px;
+  text-align: center;
+}
+
+.link-btn.is-disabled {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  opacity: 0.8;
+}
+
 .empty {
   color: var(--muted);
 }
@@ -313,6 +365,10 @@ body {
   .hero,
   .panel {
     border-radius: 16px;
+  }
+
+  .tab-nav {
+    flex-wrap: wrap;
   }
 
   .filters {
@@ -337,5 +393,9 @@ body {
   .num-btn {
     flex: 1;
     min-width: 0;
+  }
+
+  .link-btn {
+    width: 100%;
   }
 }
