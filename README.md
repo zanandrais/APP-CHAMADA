@@ -6,8 +6,6 @@ App web para:
 - mostrar o numero do `DPC` da linha 1 da mesma coluna
 - listar alunos
 - marcar/desmarcar `F`, `1`, `2` e `3` diretamente no Google Sheets
-- listar exercicios da aba `Lista` (colunas `R:AZ`) por `lista` e `ano`
-- abrir links dos exercicios diretamente pela interface
 
 ## Rodar localmente
 
@@ -29,9 +27,6 @@ Use o `render.yaml` ou configure manualmente:
 - `SHEET_PUBLISH_ID`
 - `SHEET_TAB_NAME` (padrao: `Nomes`)
 - `SHEET_NOMES_GID` (aba `Nomes`)
-- `SHEET_LISTA_TAB_NAME` (padrao: `Lista`)
-- `SHEET_LISTA_COL_START` (padrao: `R`)
-- `SHEET_LISTA_COL_END` (padrao: `AZ`)
 
 ## Variaveis para gravacao no Google Sheets
 
@@ -56,6 +51,5 @@ Observacao:
 ## Endpoints
 
 - `GET /` interface de chamada
-- `GET /api/chamada` leitura de data/turma/alunos
-- `GET /api/lista` leitura da aba `Lista` (filtros opcionais: `lista`, `ano`)
+- `GET /api/chamada` leitura de data, turma e alunos
 - `POST /api/chamada/marcar` grava `F`, `1`, `2`, `3` ou limpa uma celula (`{ "cell": "F23", "value": "F" }`)

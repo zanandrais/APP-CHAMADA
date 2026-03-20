@@ -11,16 +11,8 @@
       <section class="hero">
         <p class="tag">Google Sheets + Render</p>
         <h1>Chamada por Turma</h1>
-        <p class="subtitle">
-          Use a aba <strong>Nomes</strong> para chamada e a aba
-          <strong>Listas</strong> para abrir exercicios por ano.
-        </p>
+        <p class="subtitle">Use a aba <strong>Nomes</strong> para chamada por turma.</p>
       </section>
-
-      <nav class="tab-nav" aria-label="Abas da aplicacao">
-        <button type="button" class="tab-btn is-active" data-tab="chamada">Chamada</button>
-        <button type="button" class="tab-btn" data-tab="listas">Listas</button>
-      </nav>
 
       <section id="tab-chamada" class="tab-panel is-active">
         <div class="view-stack">
@@ -48,39 +40,9 @@
           </section>
         </div>
       </section>
-
-      <section id="tab-listas" class="tab-panel">
-        <div class="view-stack">
-          <section class="panel controls-panel">
-            <form id="listaFilterForm" class="filters">
-              <label class="field">
-                <span>Lista</span>
-                <select id="listaNomeSelect" name="lista"></select>
-              </label>
-              <label class="field">
-                <span>Ano</span>
-                <select id="listaAnoSelect" name="ano"></select>
-              </label>
-              <button id="listaLoadBtn" type="submit">Carregar lista</button>
-            </form>
-            <div id="listaInfo" class="sheet-info">Carregando...</div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Exercicios</h2>
-              <span id="listaStatus" class="status">Aguardando...</span>
-            </div>
-            <ul id="listaItems" class="name-list" aria-live="polite"></ul>
-          </section>
-        </div>
-      </section>
     </main>
 
     <script>
-      const tabButtons = document.querySelectorAll(".tab-btn");
-      const tabPanels = document.querySelectorAll(".tab-panel");
-
       const statusEl = document.getElementById("status");
       const studentListEl = document.getElementById("studentList");
       const dateInputEl = document.getElementById("dateInput");
@@ -89,39 +51,16 @@
       const formEl = document.getElementById("filterForm");
       const sheetInfoEl = document.getElementById("sheetInfo");
 
-      const listaFormEl = document.getElementById("listaFilterForm");
-      const listaNomeSelectEl = document.getElementById("listaNomeSelect");
-      const listaAnoSelectEl = document.getElementById("listaAnoSelect");
-      const listaLoadBtnEl = document.getElementById("listaLoadBtn");
-      const listaInfoEl = document.getElementById("listaInfo");
-      const listaItemsEl = document.getElementById("listaItems");
-      const listaStatusEl = document.getElementById("listaStatus");
-
       const localCellValues = new Map();
       const savingCells = new Set();
       let latestMeta = null;
-      let latestListaMeta = null;
 
-      const norm = (v) => String(v || "").trim().toUpperCase();
+      const norm = (value) => String(value || "").trim().toUpperCase();
       const cellKey = (sheet, cell) => `${sheet}|${cell}`;
-      const setStatus = (text) => (statusEl.textContent = text);
-      const setListaStatus = (text) => (listaStatusEl.textContent = text);
       const studentCell = (student, col) => student.cell || `${col}${student.rowNumber}`;
 
-      function setActiveTab(tabName) {
-        tabButtons.forEach((button) => {
-          button.classList.toggle("is-active", button.dataset.tab === tabName);
-        });
-        tabPanels.forEach((panel) => {
-          panel.classList.toggle("is-active", panel.id === `tab-${tabName}`);
-        });
-      }
-
-      for (const button of tabButtons) {
-        button.addEventListener("click", () => {
-          const tabName = button.dataset.tab || "chamada";
-          setActiveTab(tabName);
-        });
+      function setStatus(text) {
+        statusEl.textContent = text;
       }
 
       function getValue(sheet, cell, fallback) {
@@ -132,6 +71,7 @@
       function getCellValue(student, data) {
         const col = data?.selected?.dateColumn?.a1Column;
         if (!col) return "";
+
         const sheet = data?.sheet || "Nomes";
         const cell = studentCell(student, col);
         return getValue(sheet, cell, student.currentValue);
@@ -142,6 +82,7 @@
         let one = 0;
         let two = 0;
         let three = 0;
+
         for (const student of data.students || []) {
           const current = getCellValue(student, data);
           if (current === "F") f += 1;
@@ -149,7 +90,8 @@
           if (current === "2") two += 1;
           if (current === "3") three += 1;
         }
-        setStatus(`${(data.students || []).length} aluno(s) • F:${f} • 1:${one} • 2:${two} • 3:${three}`);
+
+        setStatus(`${(data.students || []).length} aluno(s) | F:${f} | 1:${one} | 2:${two} | 3:${three}`);
       }
 
       function renderInfo(data) {
@@ -210,6 +152,7 @@
       function toggleF(student, data) {
         const col = data?.selected?.dateColumn?.a1Column;
         if (!col) return;
+
         const sheet = data.sheet || "Nomes";
         const cell = studentCell(student, col);
         const next = getCellValue(student, data) === "F" ? "" : "F";
@@ -293,17 +236,24 @@
 
       function syncFilters(data) {
         latestMeta = data;
-
         turmaSelectEl.innerHTML = "";
-        (data.turmaOptions || []).forEach((turma) => {
+
+        for (const turma of data.turmaOptions || []) {
           const option = document.createElement("option");
           option.value = turma;
           option.textContent = turma;
           turmaSelectEl.appendChild(option);
-        });
+        }
 
-        if (!dateInputEl.value) dateInputEl.value = data.todaySuggestion || "";
-        if (data.selected?.turma) turmaSelectEl.value = data.selected.turma;
+        if (!dateInputEl.value) {
+          dateInputEl.value = data.todaySuggestion || "";
+        }
+
+        if (data.selected?.turma) {
+          turmaSelectEl.value = data.selected.turma;
+        } else if (!turmaSelectEl.value && (data.turmaOptions || []).length) {
+          turmaSelectEl.value = data.turmaOptions[0];
+        }
       }
 
       async function loadChamada() {
@@ -339,174 +289,17 @@
         }
       }
 
-      function fillAnoOptions(anos, selectedAno) {
-        listaAnoSelectEl.innerHTML = "";
-        (anos || []).forEach((ano) => {
-          const option = document.createElement("option");
-          option.value = ano;
-          option.textContent = ano;
-          listaAnoSelectEl.appendChild(option);
-        });
-
-        if (selectedAno && (anos || []).includes(selectedAno)) {
-          listaAnoSelectEl.value = selectedAno;
-        } else if ((anos || []).length > 0) {
-          listaAnoSelectEl.value = anos[0];
-        }
-      }
-
-      function syncListaFilters(data) {
-        latestListaMeta = data;
-        const listas = data?.options?.listas || [];
-
-        listaNomeSelectEl.innerHTML = "";
-        listas.forEach((lista) => {
-          const option = document.createElement("option");
-          option.value = lista;
-          option.textContent = lista;
-          listaNomeSelectEl.appendChild(option);
-        });
-
-        const selectedLista = data?.selected?.lista || listas[0] || "";
-        listaNomeSelectEl.value = selectedLista;
-
-        const anos = data?.options?.anosByLista?.[selectedLista] || [];
-        fillAnoOptions(anos, data?.selected?.ano || "");
-      }
-
-      function renderListaInfo(data) {
-        const selected = data.selected || {};
-        const linkCount = (data.items || []).filter((item) => item.hasLink).length;
-        const total = (data.items || []).length;
-        const source = data.source === "google_sheets_api" ? "Google Sheets API" : "GViz CSV";
-
-        let html = `<div><strong>${data.sheet}: ${data.range}</strong></div>`;
-        html += `<div>${selected.lista || "-"} • ${selected.ano || "-"} • ${total} numero(s) • ${linkCount} link(s)</div>`;
-        html += `<div>Fonte: ${source}</div>`;
-        if (data.warning) {
-          html += `<div class="warn">${data.warning}</div>`;
-        }
-
-        listaInfoEl.innerHTML = html;
-      }
-
-      function renderListaItems(data) {
-        listaItemsEl.innerHTML = "";
-        const items = data.items || [];
-
-        if (!items.length) {
-          const li = document.createElement("li");
-          li.className = "empty";
-          li.textContent = "Nenhum numero encontrado para essa combinacao.";
-          listaItemsEl.appendChild(li);
-          return;
-        }
-
-        for (const [index, item] of items.entries()) {
-          const li = document.createElement("li");
-          li.className = "name-item lista-item";
-
-          const idx = document.createElement("span");
-          idx.className = "index";
-          idx.textContent = `${index + 1}`;
-
-          const content = document.createElement("div");
-          content.className = "student-main";
-
-          const title = document.createElement("span");
-          title.className = "text";
-          title.textContent = `Numero ${item.numero}`;
-
-          const meta = document.createElement("small");
-          meta.className = "meta";
-          meta.textContent = `${data.selected?.lista || "Lista"} • ${data.selected?.ano || "Ano"} • ${item.cell || ""}`;
-
-          content.append(title, meta);
-
-          let actionEl;
-          if (item.hasLink && item.link) {
-            actionEl = document.createElement("a");
-            actionEl.className = "link-btn";
-            actionEl.href = item.link;
-            actionEl.target = "_blank";
-            actionEl.rel = "noopener noreferrer";
-            actionEl.textContent = "Abrir link";
-          } else {
-            actionEl = document.createElement("button");
-            actionEl.className = "link-btn is-disabled";
-            actionEl.type = "button";
-            actionEl.disabled = true;
-            actionEl.textContent = "Sem link";
-          }
-
-          li.append(idx, content, actionEl);
-          listaItemsEl.appendChild(li);
-        }
-      }
-
-      function setListaLoadedStatus(data) {
-        const items = data.items || [];
-        const links = items.filter((item) => item.hasLink).length;
-        setListaStatus(`${items.length} numero(s) • ${links} link(s)`);
-      }
-
-      async function loadLista() {
-        listaLoadBtnEl.disabled = true;
-        setListaStatus("Carregando...");
-        listaInfoEl.textContent = "Consultando aba Lista...";
-
-        const params = new URLSearchParams();
-        if (listaNomeSelectEl.value.trim()) params.set("lista", listaNomeSelectEl.value.trim());
-        if (listaAnoSelectEl.value.trim()) params.set("ano", listaAnoSelectEl.value.trim());
-
-        try {
-          const response = await fetch(`/api/lista?${params.toString()}`, { cache: "no-store" });
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.details || data.error || "Erro ao carregar lista");
-          }
-
-          syncListaFilters(data);
-          renderListaInfo(data);
-          renderListaItems(data);
-          setListaLoadedStatus(data);
-        } catch (error) {
-          listaItemsEl.innerHTML = "";
-          const li = document.createElement("li");
-          li.className = "empty";
-          li.textContent = error.message;
-          listaItemsEl.appendChild(li);
-          listaInfoEl.innerHTML = `<div class="warn">${error.message}</div>`;
-          setListaStatus("Erro ao carregar");
-        } finally {
-          listaLoadBtnEl.disabled = false;
-        }
-      }
-
       formEl.addEventListener("submit", (event) => {
         event.preventDefault();
         loadChamada();
       });
 
-      listaFormEl.addEventListener("submit", (event) => {
-        event.preventDefault();
-        loadLista();
-      });
-
-      listaNomeSelectEl.addEventListener("change", () => {
-        const anosByLista = latestListaMeta?.options?.anosByLista || {};
-        const anos = anosByLista[listaNomeSelectEl.value] || [];
-        fillAnoOptions(anos, "");
-      });
-
       (async function init() {
-        await Promise.all([loadChamada(), loadLista()]);
+        await loadChamada();
 
         if (!turmaSelectEl.value && latestMeta?.turmaOptions?.length) {
           turmaSelectEl.value = latestMeta.turmaOptions[0];
         }
-
-        setActiveTab("chamada");
       })();
     </script>
   </body>
