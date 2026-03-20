@@ -404,6 +404,14 @@ function extractDateColumnsAboveTurma(rows, turmaRowIndex) {
   return extractDateColumnsFromRow(rows[dateRowIndex] || [], dateRowIndex);
 }
 
+function extractDateColumnsFromTurmaRow(rows, turmaRowIndex) {
+  if (turmaRowIndex < 0 || turmaRowIndex >= rows.length) {
+    return { dateRowIndex: -1, dates: [] };
+  }
+
+  return extractDateColumnsFromRow(rows[turmaRowIndex] || [], turmaRowIndex);
+}
+
 function extractDateColumnsNearTurma(rows, turmaRowIndex, selectedDate) {
   if (turmaRowIndex < 0) {
     return { dateRowIndex: -1, dates: [] };
@@ -553,9 +561,12 @@ function buildTurmaSelectionData(rows, sheetName, selectedDate, selectedTurma, o
   const turmaRowNumber = turmaRowIndex >= 0 ? turmaRowIndex + 1 : null;
   const turmaCell = turmaRowNumber ? `A${turmaRowNumber}` : null;
   const useDateRowAboveTurma = options.dateRowMode === "above_turma";
+  const useExactTurmaRowForDates = options.dateRowMode === "turma_row_exact";
   const useTurmaRowForDates = options.dateRowMode === "turma_row";
   const dateSource =
-    useDateRowAboveTurma && turmaRowIndex >= 0
+    useExactTurmaRowForDates && turmaRowIndex >= 0
+      ? extractDateColumnsFromTurmaRow(rows, turmaRowIndex)
+      : useDateRowAboveTurma && turmaRowIndex >= 0
       ? extractDateColumnsAboveTurma(rows, turmaRowIndex)
       : useTurmaRowForDates && turmaRowIndex >= 0
       ? extractDateColumnsNearTurma(rows, turmaRowIndex, normalizedSelectedDate)
@@ -737,7 +748,7 @@ async function fetchChamadaData(selectedDate, selectedTurma) {
     SHEET_TAB_NAME,
     chosenDate,
     chosenTurma,
-    { dateRowMode: "above_turma" }
+    { dateRowMode: "turma_row_exact" }
   );
 
   return {

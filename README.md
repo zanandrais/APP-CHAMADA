@@ -2,7 +2,7 @@
 
 App web para:
 - selecionar `data` e `turma`
-- localizar a coluna da data na linha imediatamente acima da turma na aba `Nomes`
+- localizar a coluna da data na linha da propria turma na aba `Nomes`
 - mostrar o numero do `DPC` da linha 1 da mesma coluna
 - listar alunos
 - marcar/desmarcar `F`, `1`, `2` e `3` diretamente no Google Sheets
