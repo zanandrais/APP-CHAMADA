@@ -395,6 +395,15 @@ function extractDateColumns(rows) {
   return extractDateColumnsFromRow(row, headerRowIndex);
 }
 
+function extractDateColumnsAboveTurma(rows, turmaRowIndex) {
+  if (turmaRowIndex <= 0 || turmaRowIndex >= rows.length) {
+    return { dateRowIndex: -1, dates: [] };
+  }
+
+  const dateRowIndex = turmaRowIndex - 1;
+  return extractDateColumnsFromRow(rows[dateRowIndex] || [], dateRowIndex);
+}
+
 function extractDateColumnsNearTurma(rows, turmaRowIndex, selectedDate) {
   if (turmaRowIndex < 0) {
     return { dateRowIndex: -1, dates: [] };
@@ -543,14 +552,22 @@ function buildTurmaSelectionData(rows, sheetName, selectedDate, selectedTurma, o
   const turmaRowIndex = findTurmaRow(rows, selectedTurma);
   const turmaRowNumber = turmaRowIndex >= 0 ? turmaRowIndex + 1 : null;
   const turmaCell = turmaRowNumber ? `A${turmaRowNumber}` : null;
+  const useDateRowAboveTurma = options.dateRowMode === "above_turma";
   const useTurmaRowForDates = options.dateRowMode === "turma_row";
   const dateSource =
-    useTurmaRowForDates && turmaRowIndex >= 0
+    useDateRowAboveTurma && turmaRowIndex >= 0
+      ? extractDateColumnsAboveTurma(rows, turmaRowIndex)
+      : useTurmaRowForDates && turmaRowIndex >= 0
       ? extractDateColumnsNearTurma(rows, turmaRowIndex, normalizedSelectedDate)
       : extractDateColumns(rows);
   const { dateRowIndex, dates } = dateSource;
   const dateMatches = dates.filter((d) => d.value === normalizedSelectedDate);
   const selectedDateColumn = dateMatches[0] || null;
+  const dpcValue =
+    selectedDateColumn && rows[0]
+      ? String(rows[0][selectedDateColumn.colIndex] || "").trim()
+      : "";
+  const dpcCell = selectedDateColumn ? `${selectedDateColumn.a1Column}1` : null;
   const studentStartRowIndex = Math.max(turmaRowIndex, dateRowIndex);
   const students = extractStudentsForTurma(
     rows,
@@ -572,7 +589,9 @@ function buildTurmaSelectionData(rows, sheetName, selectedDate, selectedTurma, o
       dateMatchesCount: dateMatches.length,
       dateHeaderRow: dateRowIndex >= 0 ? dateRowIndex + 1 : null,
       turmaRow: turmaRowNumber,
-      turmaCell
+      turmaCell,
+      dpcValue,
+      dpcCell
     },
     students
   };
@@ -718,7 +737,7 @@ async function fetchChamadaData(selectedDate, selectedTurma) {
     SHEET_TAB_NAME,
     chosenDate,
     chosenTurma,
-    { dateRowMode: "turma_row" }
+    { dateRowMode: "above_turma" }
   );
 
   return {

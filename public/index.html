@@ -160,8 +160,11 @@
         const turmaInfo = selected.turmaRow
           ? `Nomes: turma em ${selected.turmaCell}`
           : "Nomes: turma nao encontrada";
+        const dpcInfo = selected.dpcValue
+          ? `DPC disponivel: ${selected.dpcValue} (${selected.dpcCell})`
+          : "DPC disponivel: nao encontrado";
 
-        sheetInfoEl.innerHTML = `<div><strong>${dateInfo}</strong></div><div>${turmaInfo}</div>`;
+        sheetInfoEl.innerHTML = `<div><strong>${dateInfo}</strong></div><div>${turmaInfo}</div><div>${dpcInfo}</div>`;
       }
 
       async function saveCell(sheet, cell, value) {
